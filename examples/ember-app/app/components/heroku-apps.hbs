@@ -1,0 +1,55 @@
+<div class="app-container">
+  <div class="config-section">
+    <label for="api-token-input">Heroku API Token:</label>
+    <input
+      type="password"
+      id="api-token-input"
+      placeholder="Enter your Heroku API token"
+      value={{this.apiToken}}
+      {{on "input" this.updateToken}}
+    />
+    <small>
+      Get your token from:
+      <a href="https://dashboard.heroku.com/account" target="_blank" rel="noopener noreferrer">
+        https://dashboard.heroku.com/account
+      </a>
+    </small>
+  </div>
+
+  <div class="button-group">
+    <button
+      type="button"
+      {{on "click" this.fetchApps}}
+      disabled={{this.loading}}
+    >
+      {{if this.loading "Loading..." "Fetch My Apps"}}
+    </button>
+    <button
+      type="button"
+      {{on "click" this.clearToken}}
+      disabled={{this.isTokenEmpty}}
+    >
+      Clear Token
+    </button>
+  </div>
+
+  {{#if this.error}}
+    <div class="error">{{this.error}}</div>
+  {{/if}}
+
+  {{#if this.apps}}
+    <div class="apps-list">
+      <h3>Your Apps ({{this.apps.length}})</h3>
+      {{#each this.apps as |app|}}
+        <div class="app-item">
+          <div class="app-name">{{app.name}}</div>
+          <div class="app-info">
+            Region: {{if app.region.name app.region.name "N/A"}} |
+            Stack: {{if app.stack.name app.stack.name "N/A"}} |
+            Created: {{app.created_at}}
+          </div>
+        </div>
+      {{/each}}
+    </div>
+  {{/if}}
+</div>

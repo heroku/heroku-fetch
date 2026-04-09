@@ -1,0 +1,70 @@
+{
+  "name": "@heroku/api-client",
+  "version": "0.1.0",
+  "description": "A JavaScript/TypeScript API client for Heroku APIs",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "browser": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client/environment-defaults.js": {
+      "browser": "./dist/client/browser-environment-defaults.js",
+      "default": "./dist/client/node-environment-defaults.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha",
+    "test:watch": "mocha --watch",
+    "test:coverage": "c8 --all npm test",
+    "test:coverage:report": "c8 --all --reporter=html --reporter=text npm test",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "heroku",
+    "api",
+    "client",
+    "fetch",
+    "typescript"
+  ],
+  "author": "Heroku",
+  "license": "MIT",
+  "dependencies": {
+    "debug": "^4.3.4",
+    "ky": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@heroku/heroku-cli-util": "^10.8.0",
+    "netrc-parser": "^3.1.6",
+    "open": "^10.0.3"
+  },
+  "devDependencies": {
+    "@heroku-cli/test-utils": "^0.2.0",
+    "@oclif/core": "^4.10.5",
+    "@types/debug": "^4.1.12",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.19",
+    "c8": "^11.0.0",
+    "chai": "^5.1.0",
+    "eslint": "^9.39.4",
+    "eslint-config-oclif": "^6.0.152",
+    "mocha": "^10.3.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

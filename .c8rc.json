@@ -1,0 +1,21 @@
+{
+  "all": true,
+  "src": "src",
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.d.ts",
+    "dist/**",
+    "examples/**",
+    "node_modules/**"
+  ],
+  "reporter": [
+    "text",
+    "lcov",
+    "html"
+  ],
+  "check-coverage": true,
+  "lines": 50,
+  "functions": 50,
+  "branches": 50,
+  "statements": 50
+}
