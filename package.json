@@ -30,6 +30,7 @@
     "test:coverage:report": "c8 --all --reporter=html --reporter=text npm test",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
