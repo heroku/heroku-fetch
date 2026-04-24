@@ -41,7 +41,7 @@
     "typescript"
   ],
   "author": "Heroku",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "debug": "^4.3.4",
     "ky": "^1.2.0"
