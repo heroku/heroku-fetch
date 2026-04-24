@@ -1,5 +1,5 @@
 {
-  "slug": "heroku/heroku-fetch",
+  "slug": "heroku-fetch",
   "name": "Heroku Fetch",
   "description": "A modern JavaScript/TypeScript API client for Heroku APIs",
   "language": "TypeScript",
