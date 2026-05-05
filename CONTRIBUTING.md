@@ -10,7 +10,7 @@ The intent and goal of open sourcing this project is to increase the contributor
 
 # Getting started
 
-Please join the community on TBD. Also please make sure to take a look at the project [roadmap](ROADMAP.md) to see where are headed.
+Please make sure to take a look at the project [roadmap](ROADMAP.md) to see where are headed.
 
 # Issues, requests & ideas
 
