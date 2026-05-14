@@ -9,3 +9,4 @@ coverage/
 *.pem
 *.key
 credentials.json
+examples/ember-app/package-lock.json
