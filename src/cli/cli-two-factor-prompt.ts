@@ -6,8 +6,8 @@
  *
  * @example
  * ```typescript
- * import { HerokuApiClient } from '@heroku/api-client';
- * import { cliTwoFactorPrompt } from '@heroku/api-client/cli-two-factor-prompt';
+ * import { HerokuApiClient } from '@heroku/heroku-fetch';
+ * import { cliTwoFactorPrompt } from '@heroku/heroku-fetch/cli-two-factor-prompt';
  *
  * const client = new HerokuApiClient({
  *   service: 'platform',
@@ -64,7 +64,7 @@ export async function cliTwoFactorPrompt(): Promise<string> {
  *
  * @example
  * ```typescript
- * import { createCliTwoFactorPrompt } from '@heroku/api-client/cli-two-factor-prompt';
+ * import { createCliTwoFactorPrompt } from '@heroku/heroku-fetch/cli-two-factor-prompt';
  *
  * const client = new HerokuApiClient({
  *   service: 'platform',

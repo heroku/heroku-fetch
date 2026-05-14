@@ -1,5 +1,5 @@
 {
-  "name": "@heroku/api-client",
+  "name": "@heroku/heroku-fetch",
   "version": "0.1.0",
   "description": "A JavaScript/TypeScript API client for Heroku APIs",
   "type": "module",
@@ -24,10 +24,10 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "mocha",
-    "test:watch": "mocha --watch",
-    "test:coverage": "c8 --all npm test",
-    "test:coverage:report": "c8 --all --reporter=html --reporter=text npm test",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:report": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "prepare": "npm run build",
@@ -55,15 +55,13 @@
     "@heroku-cli/test-utils": "^0.2.0",
     "@oclif/core": "^4.10.5",
     "@types/debug": "^4.1.12",
-    "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.19",
-    "c8": "^11.0.0",
-    "chai": "^5.1.0",
+    "@vitest/coverage-v8": "^2.1.0",
     "eslint": "^9.39.4",
     "eslint-config-oclif": "^6.0.152",
-    "mocha": "^10.3.0",
     "tsx": "^4.7.1",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=22"

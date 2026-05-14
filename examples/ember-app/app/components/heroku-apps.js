@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { HerokuApiClient, HerokuApiError } from '@heroku/api-client';
+import { HerokuApiClient, HerokuApiError } from '@heroku/heroku-fetch';
 
 export default class HerokuAppsComponent extends Component {
   @tracked apps = [];

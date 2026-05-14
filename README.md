@@ -16,7 +16,7 @@ A modern JavaScript/TypeScript API client for Heroku APIs, built on the Fetch AP
 ## Installation
 
 ```bash
-npm install @heroku/api-client
+npm install @heroku/heroku-fetch
 ```
 
 ## Quick Start
@@ -24,7 +24,7 @@ npm install @heroku/api-client
 ### Basic Usage
 
 ```typescript
-import { HerokuApiClient } from '@heroku/api-client';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 // Create a client for the Platform API
 // Automatically uses token from HEROKU_API_KEY env var or ~/.netrc
@@ -83,7 +83,7 @@ const customClient = new HerokuApiClient({
 By default, the client automatically fetches tokens from `HEROKU_API_KEY` environment variable or `~/.netrc` file. **No manual token management required!**
 
 ```typescript
-import { HerokuApiClient } from '@heroku/api-client';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 // Token automatically loaded from HEROKU_API_KEY or ~/.netrc
 const client = new HerokuApiClient({
@@ -98,7 +98,7 @@ The token priority is:
 If you need to manually retrieve the token for other purposes, you can use `getAuthToken()`:
 
 ```typescript
-import { getAuthToken } from '@heroku/api-client';
+import { getAuthToken } from '@heroku/heroku-fetch';
 
 const token = getAuthToken(); // Returns string | undefined
 ```
@@ -117,7 +117,7 @@ const client = new HerokuApiClient({
 Use a function to dynamically retrieve or refresh tokens:
 
 ```typescript
-import { getAuthTokenProvider } from '@heroku/api-client';
+import { getAuthTokenProvider } from '@heroku/heroku-fetch';
 
 // Option 1: Use the built-in provider for dynamic token fetching
 const client = new HerokuApiClient({
@@ -275,7 +275,7 @@ import {
   NotFoundError,
   TwoFactorRequiredError,
   RateLimitError,
-} from '@heroku/api-client';
+} from '@heroku/heroku-fetch';
 
 try {
   const response = await client.get('/apps/nonexistent');
@@ -376,7 +376,7 @@ import type {
   RequestOptions,
   HerokuService,
   TokenProvider,
-} from '@heroku/api-client';
+} from '@heroku/heroku-fetch';
 ```
 
 ## Examples
@@ -455,7 +455,7 @@ Complete examples for building oclif CLI commands are available in `examples/ocl
 
 ```typescript
 import { Command } from '@oclif/core';
-import { HerokuApiClient } from '@heroku/api-client';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 export default class AppsList extends Command {
   async run() {

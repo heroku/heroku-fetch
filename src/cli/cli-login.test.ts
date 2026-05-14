@@ -1,12 +1,11 @@
-import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, expect, it} from 'vitest'
 
 import {HerokuApiClient} from '../client/index.js'
 import {Login} from './cli-login.js'
 
 describe('CLI Login (re-export)', () => {
   it('should export Login class', () => {
-    expect(Login).to.be.a('function')
+    expect(typeof Login).toBe('function')
   })
 
   it('should be able to instantiate Login', () => {
@@ -15,6 +14,6 @@ describe('CLI Login (re-export)', () => {
       token: 'test-token',
     })
     const login = new Login(client)
-    expect(login).to.be.instanceOf(Login)
+    expect(login).toBeInstanceOf(Login)
   })
 })

@@ -27,7 +27,7 @@ function getNetrc(): Netrc {
  *
  * @example
  * ```typescript
- * import { getAuthToken, HerokuApiClient } from '@heroku/api-client';
+ * import { getAuthToken, HerokuApiClient } from '@heroku/heroku-fetch';
  *
  * const token = getAuthToken();
  * const client = new HerokuApiClient({
@@ -90,7 +90,7 @@ export function getApiUrl(): string {
  *
  * @example
  * ```typescript
- * import { getAuthTokenProvider, HerokuApiClient } from '@heroku/api-client';
+ * import { getAuthTokenProvider, HerokuApiClient } from '@heroku/heroku-fetch';
  *
  * const client = new HerokuApiClient({
  *   service: 'platform',

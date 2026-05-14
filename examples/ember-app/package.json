@@ -8,7 +8,7 @@
     "build": "ember build --environment=production"
   },
   "dependencies": {
-    "@heroku/api-client": "file:../.."
+    "@heroku/heroku-fetch": "file:../.."
   },
   "devDependencies": {
     "@babel/core": "^7.23.0",

@@ -1,5 +1,4 @@
-import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, expect, it} from 'vitest'
 
 import {HerokuApiClient} from './index.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
@@ -8,17 +7,17 @@ describe('HerokuApiClient', () => {
   describe('constructor', () => {
     it('should create a client with default options', () => {
       const client = new HerokuApiClient()
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should create a client for platform service', () => {
       const client = new HerokuApiClient({service: 'platform'})
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should create a client for data service', () => {
       const client = new HerokuApiClient({service: 'data'})
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should create a client with static token', () => {
@@ -26,7 +25,7 @@ describe('HerokuApiClient', () => {
         service: 'platform',
         token: 'test-token',
       })
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should create a client with token function', () => {
@@ -34,13 +33,13 @@ describe('HerokuApiClient', () => {
         service: 'platform',
         token: async () => 'test-token',
       })
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should throw error when custom service without baseUrl', () => {
       expect(() => {
         new HerokuApiClient({service: 'custom'})
-      }).to.throw('baseUrl is required when service is "custom"')
+      }).toThrow('baseUrl is required when service is "custom"')
     })
 
     it('should create a client with custom baseUrl', () => {
@@ -48,7 +47,7 @@ describe('HerokuApiClient', () => {
         baseUrl: 'https://custom.example.com',
         service: 'custom',
       })
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should support region for data service', () => {
@@ -56,7 +55,7 @@ describe('HerokuApiClient', () => {
         region: 'eu',
         service: 'data',
       })
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
     it('should support custom headers', () => {
@@ -66,7 +65,7 @@ describe('HerokuApiClient', () => {
         },
         service: 'platform',
       })
-      expect(client).to.be.instanceOf(HerokuApiClient)
+      expect(client).toBeInstanceOf(HerokuApiClient)
     })
   })
 
@@ -87,57 +86,57 @@ describe('HerokuApiClient', () => {
   describe('HTTP methods', () => {
     it('should have get method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.get).to.be.a('function')
+      expect(typeof client.get).toBe('function')
     })
 
     it('should have post method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.post).to.be.a('function')
+      expect(typeof client.post).toBe('function')
     })
 
     it('should have put method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.put).to.be.a('function')
+      expect(typeof client.put).toBe('function')
     })
 
     it('should have patch method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.patch).to.be.a('function')
+      expect(typeof client.patch).toBe('function')
     })
 
     it('should have delete method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.delete).to.be.a('function')
+      expect(typeof client.delete).toBe('function')
     })
 
     it('should have stream method', () => {
       const client = new HerokuApiClient({token: 'test'})
-      expect(client.stream).to.be.a('function')
+      expect(typeof client.stream).toBe('function')
     })
   })
 })
 
 describe('SERVICE_CONFIGS', () => {
   it('should have platform config', () => {
-    expect(SERVICE_CONFIGS.platform).to.deep.equal({
+    expect(SERVICE_CONFIGS.platform).toEqual({
       baseUrl: 'https://api.heroku.com',
     })
   })
 
   it('should have data config', () => {
-    expect(SERVICE_CONFIGS.data).to.deep.equal({
+    expect(SERVICE_CONFIGS.data).toEqual({
       baseUrl: 'https://postgres-api.heroku.com',
     })
   })
 
   it('should have particleboard config', () => {
-    expect(SERVICE_CONFIGS.particleboard).to.deep.equal({
+    expect(SERVICE_CONFIGS.particleboard).toEqual({
       baseUrl: 'https://particleboard.heroku.com',
     })
   })
 
   it('should have custom config', () => {
-    expect(SERVICE_CONFIGS.custom).to.deep.equal({
+    expect(SERVICE_CONFIGS.custom).toEqual({
       baseUrl: '',
     })
   })

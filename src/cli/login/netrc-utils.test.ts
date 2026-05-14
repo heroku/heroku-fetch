@@ -1,5 +1,4 @@
-import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, expect, it} from 'vitest'
 
 import {
   clearTokens, getNetrc, getStoredLogin, getStoredToken, saveToken,
@@ -9,20 +8,20 @@ describe('Netrc utilities', () => {
   describe('getNetrc', () => {
     it('should return a Netrc instance', () => {
       const netrc = getNetrc()
-      expect(netrc).to.exist
-      expect(netrc).to.be.an('object')
+      expect(netrc).toBeDefined()
+      expect(typeof netrc).toBe('object')
     })
 
     it('should return the same instance on subsequent calls', () => {
       const netrc1 = getNetrc()
       const netrc2 = getNetrc()
-      expect(netrc1).to.equal(netrc2)
+      expect(netrc1).toBe(netrc2)
     })
   })
 
   describe('saveToken', () => {
     it('should be a function', () => {
-      expect(saveToken).to.be.a('function')
+      expect(typeof saveToken).toBe('function')
     })
 
     it('should return a promise', () => {
@@ -31,7 +30,7 @@ describe('Netrc utilities', () => {
         'api.heroku.com',
         'git.heroku.com',
       )
-      expect(result).to.be.instanceOf(Promise)
+      expect(result).toBeInstanceOf(Promise)
       // Clean up - we don't actually want to save during tests
       result.catch(() => {})
     })
@@ -39,36 +38,36 @@ describe('Netrc utilities', () => {
 
   describe('clearTokens', () => {
     it('should be a function', () => {
-      expect(clearTokens).to.be.a('function')
+      expect(typeof clearTokens).toBe('function')
     })
 
     it('should return a promise', () => {
       const result = clearTokens('api.heroku.com', 'git.heroku.com')
-      expect(result).to.be.instanceOf(Promise)
+      expect(result).toBeInstanceOf(Promise)
       result.catch(() => {})
     })
   })
 
   describe('getStoredToken', () => {
     it('should be a function', () => {
-      expect(getStoredToken).to.be.a('function')
+      expect(typeof getStoredToken).toBe('function')
     })
 
     it('should return a promise', () => {
       const result = getStoredToken('api.heroku.com')
-      expect(result).to.be.instanceOf(Promise)
+      expect(result).toBeInstanceOf(Promise)
       result.catch(() => {})
     })
   })
 
   describe('getStoredLogin', () => {
     it('should be a function', () => {
-      expect(getStoredLogin).to.be.a('function')
+      expect(typeof getStoredLogin).toBe('function')
     })
 
     it('should return a promise', () => {
       const result = getStoredLogin('api.heroku.com')
-      expect(result).to.be.instanceOf(Promise)
+      expect(result).toBeInstanceOf(Promise)
       result.catch(() => {})
     })
   })
