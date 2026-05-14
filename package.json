@@ -53,15 +53,15 @@
   },
   "devDependencies": {
     "@heroku-cli/test-utils": "^0.2.0",
-    "@oclif/core": "^4.10.5",
+    "@oclif/core": "^4.11.2",
     "@types/debug": "^4.1.12",
-    "@types/node": "^20.11.19",
-    "@vitest/coverage-v8": "^2.1.0",
-    "eslint": "^9.39.4",
-    "eslint-config-oclif": "^6.0.152",
-    "tsx": "^4.7.1",
+    "@types/node": "^25.8.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.3.0",
+    "eslint-config-oclif": "^6.0.164",
+    "tsx": "^4.22.0",
     "typescript": "^5.3.3",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.6"
   },
   "engines": {
     "node": ">=22"
