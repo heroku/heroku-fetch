@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/api-client/client/environment-defaults.js'
+import {getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {

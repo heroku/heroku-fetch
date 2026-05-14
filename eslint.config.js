@@ -26,13 +26,10 @@ export default [
   {
     files: ['src/**/*.test.ts', 'test/**/*.ts'],
     rules: {
-      // Chai assertions use expression syntax
-      '@typescript-eslint/no-unused-expressions': 'off',
-
       // Tests may use new for side effects
       'no-new': 'off',
 
-      // Allow multiple top-level suites in test files
+      // Vitest doesn't restrict top-level suites the way mocha does
       'mocha/max-top-level-suites': 'off',
     },
   },

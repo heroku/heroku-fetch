@@ -1,5 +1,5 @@
 /**
- * Browser-specific entry point for @heroku/api-client
+ * Browser-specific entry point for @heroku/heroku-fetch
  *
  * This entry point excludes Node.js-specific features like:
  * - CLI utilities (login, 2FA prompts)

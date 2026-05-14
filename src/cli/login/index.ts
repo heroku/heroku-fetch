@@ -6,8 +6,8 @@
  *
  * @example
  * ```typescript
- * import { Login } from '@heroku/api-client/cli-login';
- * import { HerokuApiClient } from '@heroku/api-client';
+ * import { Login } from '@heroku/heroku-fetch/cli-login';
+ * import { HerokuApiClient } from '@heroku/heroku-fetch';
  *
  * const client = new HerokuApiClient({ service: 'platform' });
  * const login = new Login(client);

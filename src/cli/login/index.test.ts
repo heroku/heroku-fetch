@@ -1,5 +1,6 @@
-import {expect} from 'chai'
-import {beforeEach, describe, it} from 'mocha'
+import {
+  beforeEach, describe, expect, it,
+} from 'vitest'
 
 import {HerokuApiClient} from '../../client/index.js'
 import {Login} from './index.js'
@@ -17,12 +18,12 @@ describe('Login', () => {
   describe('constructor', () => {
     it('should create a Login instance', () => {
       const login = new Login(client)
-      expect(login).to.be.instanceOf(Login)
+      expect(login).toBeInstanceOf(Login)
     })
 
     it('should accept a HerokuApiClient', () => {
       const login = new Login(client)
-      expect(login).to.exist
+      expect(login).toBeDefined()
     })
   })
 
@@ -34,13 +35,13 @@ describe('Login', () => {
     })
 
     it('should have a login method', () => {
-      expect(login).to.have.property('login')
-      expect(login.login).to.be.a('function')
+      expect(login).toHaveProperty('login')
+      expect(typeof login.login).toBe('function')
     })
 
     it('should have a logout method', () => {
-      expect(login).to.have.property('logout')
-      expect(login.logout).to.be.a('function')
+      expect(login).toHaveProperty('logout')
+      expect(typeof login.logout).toBe('function')
     })
   })
 
@@ -51,11 +52,7 @@ describe('Login', () => {
 
       try {
         process.env.HEROKU_API_KEY = 'test-key'
-        await login.login()
-        expect.fail('Should have thrown an error')
-      } catch (error) {
-        expect(error).to.be.instanceOf(Error)
-        expect((error as Error).message).to.include('Cannot log in with HEROKU_API_KEY set')
+        await expect(login.login()).rejects.toThrow('Cannot log in with HEROKU_API_KEY set')
       } finally {
         if (oldValue) {
           process.env.HEROKU_API_KEY = oldValue
@@ -69,13 +66,7 @@ describe('Login', () => {
       const login = new Login(client)
       const thirtyOneDays = 31 * 24 * 60 * 60 // 31 days in seconds
 
-      try {
-        await login.login({expiresIn: thirtyOneDays})
-        expect.fail('Should have thrown an error')
-      } catch (error) {
-        expect(error).to.be.instanceOf(Error)
-        expect((error as Error).message).to.include('Cannot set an expiration longer than thirty days')
-      }
+      await expect(login.login({expiresIn: thirtyOneDays})).rejects.toThrow('Cannot set an expiration longer than thirty days')
     })
   })
 })

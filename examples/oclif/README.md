@@ -19,7 +19,7 @@ These examples demonstrate:
 All examples use automatic authentication. **No manual token management needed!**
 
 ```typescript
-import { HerokuApiClient } from '@heroku/api-client';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 // Client automatically gets token from:
 // 1. HEROKU_API_KEY environment variable (priority)
@@ -179,7 +179,7 @@ heroku pg:info DATABASE --app my-app
 ### 1. Install Dependencies
 
 ```bash
-npm install @heroku/api-client @oclif/core
+npm install @heroku/heroku-fetch @oclif/core
 ```
 
 ### 2. Copy Example Commands
@@ -201,7 +201,7 @@ src/
 
 The examples use the pattern:
 ```typescript
-import { HerokuApiClient, getAuthToken } from '@heroku/api-client';
+import { HerokuApiClient, getAuthToken } from '@heroku/heroku-fetch';
 ```
 
 This works out of the box - no additional setup needed!
@@ -220,7 +220,7 @@ npm run build
 
 ```typescript
 import { Command } from '@oclif/core';
-import { HerokuApiClient, HerokuApiError } from '@heroku/api-client';
+import { HerokuApiClient, HerokuApiError } from '@heroku/heroku-fetch';
 
 export default class MyCommand extends Command {
   async run() {
@@ -315,7 +315,7 @@ await client.delete('/apps/my-app');
 To customize the 2FA prompt or use a different prompting mechanism:
 
 ```typescript
-import { createCliTwoFactorPrompt } from '@heroku/api-client';
+import { createCliTwoFactorPrompt } from '@heroku/heroku-fetch';
 
 const client = new HerokuApiClient({
   service: 'platform',

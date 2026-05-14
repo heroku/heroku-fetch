@@ -1,6 +1,6 @@
 # Heroku Fetch - Ember Example
 
-This is a simple Ember application that demonstrates using `@heroku/api-client` (heroku-fetch) in a browser-based Ember app.
+This is a simple Ember application that demonstrates using `@heroku/heroku-fetch` (heroku-fetch) in a browser-based Ember app.
 
 ## Features
 
@@ -49,7 +49,7 @@ The example uses a Glimmer component (`app/components/heroku-apps.js`) that:
 ## Key Code
 
 ```javascript
-import { HerokuApiClient, HerokuApiError } from '@heroku/api-client';
+import { HerokuApiClient, HerokuApiError } from '@heroku/heroku-fetch';
 
 // Create client with your token (required in browser environments)
 const client = new HerokuApiClient({
@@ -64,7 +64,7 @@ const apps = await response.json();
 
 ## Browser Compatibility
 
-The `@heroku/api-client` package uses **conditional exports** to automatically provide browser-compatible code when bundling for browsers. This means:
+The `@heroku/heroku-fetch` package uses **conditional exports** to automatically provide browser-compatible code when bundling for browsers. This means:
 
 - **No webpack configuration needed** - the package automatically excludes Node.js-specific code (netrc, file system access, CLI utilities)
 - **Shared core code** - The same HTTP client logic is used in both Node.js and browser environments

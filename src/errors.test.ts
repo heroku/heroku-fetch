@@ -1,5 +1,4 @@
-import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, expect, it} from 'vitest'
 
 import {
   AuthenticationError,
@@ -13,10 +12,10 @@ describe('Error classes', () => {
   describe('HerokuApiError', () => {
     it('should create an error with message and status code', () => {
       const error = new HerokuApiError('Test error', 500)
-      expect(error).to.be.instanceOf(HerokuApiError)
-      expect(error.message).to.equal('Test error')
-      expect(error.statusCode).to.equal(500)
-      expect(error.name).to.equal('HerokuApiError')
+      expect(error).toBeInstanceOf(HerokuApiError)
+      expect(error.message).toBe('Test error')
+      expect(error.statusCode).toBe(500)
+      expect(error.name).toBe('HerokuApiError')
     })
 
     it('should include error body details', () => {
@@ -26,8 +25,8 @@ describe('Error classes', () => {
         message: 'Test message',
       }
       const error = new HerokuApiError('Test error', 400, undefined, errorBody)
-      expect(error.id).to.equal('test_error')
-      expect(error.errors).to.deep.equal([{id: 'error1', message: 'Error 1'}])
+      expect(error.id).toBe('test_error')
+      expect(error.errors).toEqual([{id: 'error1', message: 'Error 1'}])
     })
   })
 
@@ -35,11 +34,11 @@ describe('Error classes', () => {
     it('should create a 2FA error', () => {
       const mockResponse = new Response(null, {status: 412})
       const error = new TwoFactorRequiredError(mockResponse)
-      expect(error).to.be.instanceOf(TwoFactorRequiredError)
-      expect(error).to.be.instanceOf(HerokuApiError)
-      expect(error.message).to.equal('Two-factor authentication required')
-      expect(error.statusCode).to.equal(412)
-      expect(error.name).to.equal('TwoFactorRequiredError')
+      expect(error).toBeInstanceOf(TwoFactorRequiredError)
+      expect(error).toBeInstanceOf(HerokuApiError)
+      expect(error.message).toBe('Two-factor authentication required')
+      expect(error.statusCode).toBe(412)
+      expect(error.name).toBe('TwoFactorRequiredError')
     })
   })
 
@@ -47,11 +46,11 @@ describe('Error classes', () => {
     it('should create an authentication error', () => {
       const mockResponse = new Response(null, {status: 401})
       const error = new AuthenticationError(mockResponse)
-      expect(error).to.be.instanceOf(AuthenticationError)
-      expect(error).to.be.instanceOf(HerokuApiError)
-      expect(error.message).to.equal('Authentication failed')
-      expect(error.statusCode).to.equal(401)
-      expect(error.name).to.equal('AuthenticationError')
+      expect(error).toBeInstanceOf(AuthenticationError)
+      expect(error).toBeInstanceOf(HerokuApiError)
+      expect(error.message).toBe('Authentication failed')
+      expect(error.statusCode).toBe(401)
+      expect(error.name).toBe('AuthenticationError')
     })
   })
 
@@ -59,11 +58,11 @@ describe('Error classes', () => {
     it('should create a not found error', () => {
       const mockResponse = new Response(null, {status: 404})
       const error = new NotFoundError(mockResponse)
-      expect(error).to.be.instanceOf(NotFoundError)
-      expect(error).to.be.instanceOf(HerokuApiError)
-      expect(error.message).to.equal('Resource not found')
-      expect(error.statusCode).to.equal(404)
-      expect(error.name).to.equal('NotFoundError')
+      expect(error).toBeInstanceOf(NotFoundError)
+      expect(error).toBeInstanceOf(HerokuApiError)
+      expect(error.message).toBe('Resource not found')
+      expect(error.statusCode).toBe(404)
+      expect(error.name).toBe('NotFoundError')
     })
   })
 
@@ -71,11 +70,11 @@ describe('Error classes', () => {
     it('should create a rate limit error', () => {
       const mockResponse = new Response(null, {status: 429})
       const error = new RateLimitError(mockResponse)
-      expect(error).to.be.instanceOf(RateLimitError)
-      expect(error).to.be.instanceOf(HerokuApiError)
-      expect(error.message).to.equal('Rate limit exceeded')
-      expect(error.statusCode).to.equal(429)
-      expect(error.name).to.equal('RateLimitError')
+      expect(error).toBeInstanceOf(RateLimitError)
+      expect(error).toBeInstanceOf(HerokuApiError)
+      expect(error.message).toBe('Rate limit exceeded')
+      expect(error.statusCode).toBe(429)
+      expect(error.name).toBe('RateLimitError')
     })
 
     it('should extract Retry-After header', () => {
@@ -84,7 +83,7 @@ describe('Error classes', () => {
         status: 429,
       })
       const error = new RateLimitError(mockResponse)
-      expect(error.retryAfter).to.equal(60)
+      expect(error.retryAfter).toBe(60)
     })
   })
 })
