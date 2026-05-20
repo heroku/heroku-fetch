@@ -53,4 +53,10 @@ export interface HerokuErrorResponse {
   errors?: HerokuError[];
   id: string;
   message?: string;
+  /**
+   * The kind of resource that was missing or invalid (e.g. `add_on`,
+   * `app`). Returned by the platform on certain 404/422 responses;
+   * absent on others.
+   */
+  resource?: string;
 }
