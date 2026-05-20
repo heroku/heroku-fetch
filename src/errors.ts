@@ -3,6 +3,7 @@ import type {HerokuErrorResponse} from './types.js'
 export class HerokuApiError extends Error {
   public errors?: Array<{id: string; message: string}>
   public id?: string
+  public resource?: string
   public response?: Response
   public statusCode: number
 
@@ -15,6 +16,7 @@ export class HerokuApiError extends Error {
     if (errorBody) {
       this.id = errorBody.id
       this.errors = errorBody.errors
+      this.resource = errorBody.resource
     }
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)

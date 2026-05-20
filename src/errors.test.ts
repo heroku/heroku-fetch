@@ -28,6 +28,22 @@ describe('Error classes', () => {
       expect(error.id).toBe('test_error')
       expect(error.errors).toEqual([{id: 'error1', message: 'Error 1'}])
     })
+
+    it('preserves the resource field from the error body', () => {
+      const error = new HerokuApiError('Not found', 404, undefined, {
+        id: 'not_found',
+        message: 'Couldn\'t find that add-on.',
+        resource: 'add_on',
+      })
+      expect(error.resource).toBe('add_on')
+    })
+
+    it('leaves resource undefined when the error body lacks it', () => {
+      const error = new HerokuApiError('Boom', 500, undefined, {
+        id: 'server_error',
+      })
+      expect(error.resource).toBeUndefined()
+    })
   })
 
   describe('TwoFactorRequiredError', () => {
