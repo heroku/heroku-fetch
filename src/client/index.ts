@@ -71,6 +71,7 @@ export class HerokuApiClient {
         beforeRequest: [
           createBeforeRequestHook(
             () => this.getToken(),
+            serviceConfig.defaultAccept,
             options.headers,
             this.options.debug,
           ),

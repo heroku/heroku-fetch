@@ -18,13 +18,16 @@ import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handle
  */
 export function createBeforeRequestHook(
   getToken: () => Promise<string | undefined>,
+  defaultAccept: string | undefined,
   customHeaders?: Record<string, string>,
   debug?: boolean,
 ): BeforeRequestHook {
   return async request => {
-    // Add Accept header
-    if (!request.headers.has('Accept')) {
-      request.headers.set('Accept', 'application/vnd.heroku+json; version=3')
+    // Apply the service's default Accept header when the caller
+    // hasn't set one. Services that don't declare one (e.g. `custom`)
+    // skip this entirely.
+    if (defaultAccept && !request.headers.has('Accept')) {
+      request.headers.set('Accept', defaultAccept)
     }
 
     // Add custom headers from options

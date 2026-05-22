@@ -117,25 +117,30 @@ describe('HerokuApiClient', () => {
 })
 
 describe('SERVICE_CONFIGS', () => {
+  const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
+
   it('should have platform config', () => {
     expect(SERVICE_CONFIGS.platform).toEqual({
       baseUrl: 'https://api.heroku.com',
+      defaultAccept: HEROKU_V3_ACCEPT,
     })
   })
 
   it('should have data config', () => {
     expect(SERVICE_CONFIGS.data).toEqual({
       baseUrl: 'https://postgres-api.heroku.com',
+      defaultAccept: HEROKU_V3_ACCEPT,
     })
   })
 
   it('should have particleboard config', () => {
     expect(SERVICE_CONFIGS.particleboard).toEqual({
       baseUrl: 'https://particleboard.heroku.com',
+      defaultAccept: HEROKU_V3_ACCEPT,
     })
   })
 
-  it('should have custom config', () => {
+  it('should have custom config without a default Accept', () => {
     expect(SERVICE_CONFIGS.custom).toEqual({
       baseUrl: '',
     })
