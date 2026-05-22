@@ -5,6 +5,8 @@
 
 import type {TokenProvider, TwoFactorOptions} from '../types.js'
 
+import {debugRequest} from '../debug-loggers.js'
+
 /**
  * Get default token provider for Node.js (uses netrc/env vars)
  */
@@ -29,5 +31,30 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions {
       const {cliTwoFactorPrompt} = await import('../cli/cli-two-factor-prompt.js')
       return cliTwoFactorPrompt()
     },
+  }
+}
+
+/**
+ * Get an undici Dispatcher that routes Node's fetch through an
+ * `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`-aware proxy agent.
+ *
+ * Returns `undefined` if undici isn't loadable (e.g. on a non-Node
+ * runtime like Bun that exposes `process.versions.node` but doesn't
+ * ship undici); callers should skip the option in that case so ky
+ * falls back to native fetch.
+ *
+ * ky forwards the `dispatcher` option through to the underlying
+ * fetch — see https://github.com/sindresorhus/ky#proxy-support-nodejs.
+ */
+export async function getDefaultDispatcher(): Promise<undefined | unknown> {
+  try {
+    // Dynamic import keeps undici out of browser bundles (the
+    // package.json `browser` condition resolves this whole module
+    // away in browser builds).
+    const {EnvHttpProxyAgent} = await import('undici')
+    return new EnvHttpProxyAgent()
+  } catch (error) {
+    debugRequest('undici not available; skipping dispatcher (%o)', error)
+    return undefined
   }
 }

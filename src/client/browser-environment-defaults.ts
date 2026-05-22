@@ -18,3 +18,15 @@ export function getDefaultTokenProvider(): TokenProvider | undefined {
 export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
   return undefined
 }
+
+/**
+ * Get a default dispatcher for the browser.
+ *
+ * Always `undefined`. Browsers route through their own proxy stack
+ * (OS / browser settings), and the `dispatcher` option is undici-
+ * specific anyway — passing it would be ignored or could surface as
+ * a TypeError in some bundlers.
+ */
+export async function getDefaultDispatcher(): Promise<undefined> {
+  return undefined
+}

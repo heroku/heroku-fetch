@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {getDefaultDispatcher, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -20,7 +20,8 @@ import {createAfterResponseHook, createBeforeRequestHook} from './http-request-h
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
 export class HerokuApiClient {
-  private client: KyInstance
+  private clientPromise: null | Promise<KyInstance> = null
+  private kyOptions: KyOptions
   private options: Partial<HerokuApiClientOptions>
     & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
   private tokenProvider?: TokenProvider
@@ -56,8 +57,10 @@ export class HerokuApiClient {
 
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
-    // Create ky instance with hooks
-    this.client = ky.create({
+    // Stash the ky options; the actual ky instance is built lazily so
+    // we can await getDefaultDispatcher() (Node loads undici
+    // dynamically for env-var proxy support).
+    this.kyOptions = {
       hooks: {
         afterResponse: [
           createAfterResponseHook(
@@ -68,14 +71,15 @@ export class HerokuApiClient {
         beforeRequest: [
           createBeforeRequestHook(
             () => this.getToken(),
+            serviceConfig.defaultAccept,
             options.headers,
             this.options.debug,
           ),
         ],
       },
-      prefixUrl: baseUrl,
+      prefix: baseUrl,
       timeout: this.options.timeout,
-    })
+    }
   }
 
   /**
@@ -139,9 +143,6 @@ export class HerokuApiClient {
   public async stream(path: string, options?: RequestOptions): Promise<Response> {
     debugRequest('STREAM %s', path)
 
-    // Remove leading slash for ky's prefixUrl
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path
-
     const kyOptions: KyOptions = {
       headers: options?.headers,
       method: 'GET',
@@ -149,7 +150,28 @@ export class HerokuApiClient {
       timeout: options?.timeout || this.options.timeout,
     }
 
-    return this.client(cleanPath, kyOptions)
+    const client = await this.getClient()
+    return client(path, kyOptions)
+  }
+
+  /**
+   * Lazily construct ky with an env-aware undici dispatcher (Node)
+   * or no dispatcher (browser). Cached after the first call.
+   */
+  private async getClient(): Promise<KyInstance> {
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const dispatcher = await getDefaultDispatcher()
+        // ky's type definitions don't include `dispatcher`; it's
+        // passed through to fetch as undici expects it.
+        const opts: KyOptions = dispatcher
+          ? ({...this.kyOptions, dispatcher} as never)
+          : this.kyOptions
+        return ky.create(opts)
+      })()
+    }
+
+    return this.clientPromise
   }
 
   /**
@@ -174,9 +196,6 @@ export class HerokuApiClient {
     path: string,
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
-    // Remove leading slash for ky's prefixUrl
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path
-
     const kyOptions: KyOptions = {
       headers: options?.headers,
       method: options?.method || 'GET',
@@ -188,6 +207,7 @@ export class HerokuApiClient {
       kyOptions.json = options.body
     }
 
-    return this.client(cleanPath, kyOptions)
+    const client = await this.getClient()
+    return client(path, kyOptions)
   }
 }

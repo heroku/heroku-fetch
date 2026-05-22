@@ -10,6 +10,14 @@ export interface TwoFactorOptions {
 export interface ServiceConfig {
   /** Base URL for the service */
   baseUrl: string;
+  /**
+   * Default Accept header to apply to outgoing requests when the
+   * caller hasn't set one. Omit for services that should not inject
+   * any Accept default — e.g. `custom`, where the URL may be a
+   * third-party host that wouldn't recognize the Heroku vendor MIME
+   * type.
+   */
+  defaultAccept?: string;
   /** Default region (if applicable) */
   region?: string;
 }
