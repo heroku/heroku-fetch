@@ -40,8 +40,8 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions {
  *
  * Returns `undefined` when no proxy env var is set, so we don't
  * install a custom dispatcher that bypasses Node's global agent
- * (and the `http`/`https` interceptors that test libraries like
- * nock rely on).
+ * (and the `http`/`https` interceptors that test libraries
+ * intercept).
  *
  * Returns `undefined` when undici isn't loadable (e.g. on a non-Node
  * runtime like Bun that exposes `process.versions.node` but doesn't
