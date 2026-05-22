@@ -156,10 +156,7 @@ export class HerokuApiClient {
 
   /**
    * Lazily construct ky with an env-aware undici dispatcher (Node)
-   * or no dispatcher (browser). ky forwards the dispatcher option
-   * through to the underlying fetch — see
-   * https://github.com/sindresorhus/ky#proxy-support-nodejs.
-   * Cached after the first call.
+   * or no dispatcher (browser). Cached after the first call.
    */
   private async getClient(): Promise<KyInstance> {
     if (!this.clientPromise) {
