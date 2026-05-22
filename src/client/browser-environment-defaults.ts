@@ -18,3 +18,13 @@ export function getDefaultTokenProvider(): TokenProvider | undefined {
 export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
   return undefined
 }
+
+/**
+ * Get a fetch implementation suitable for the browser.
+ *
+ * Returns the native fetch unchanged. Browsers handle User-Agent
+ * themselves and route through their own proxy stack.
+ */
+export async function getDefaultFetch(): Promise<typeof fetch> {
+  return fetch
+}

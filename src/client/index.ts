@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -20,7 +20,8 @@ import {createAfterResponseHook, createBeforeRequestHook} from './http-request-h
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
 export class HerokuApiClient {
-  private client: KyInstance
+  private clientPromise: null | Promise<KyInstance> = null
+  private kyOptions: KyOptions
   private options: Partial<HerokuApiClientOptions>
     & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
   private tokenProvider?: TokenProvider
@@ -56,8 +57,10 @@ export class HerokuApiClient {
 
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
-    // Create ky instance with hooks
-    this.client = ky.create({
+    // Stash the ky options; the actual ky instance is built lazily so
+    // we can await getDefaultFetch() (Node loads undici dynamically
+    // for env-var proxy support).
+    this.kyOptions = {
       hooks: {
         afterResponse: [
           createAfterResponseHook(
@@ -75,7 +78,7 @@ export class HerokuApiClient {
       },
       prefixUrl: baseUrl,
       timeout: this.options.timeout,
-    })
+    }
   }
 
   /**
@@ -149,7 +152,23 @@ export class HerokuApiClient {
       timeout: options?.timeout || this.options.timeout,
     }
 
-    return this.client(cleanPath, kyOptions)
+    const client = await this.getClient()
+    return client(cleanPath, kyOptions)
+  }
+
+  /**
+   * Lazily construct ky with the env-aware fetch from environment-defaults.
+   * Cached after the first call.
+   */
+  private async getClient(): Promise<KyInstance> {
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const fetchImpl = await getDefaultFetch()
+        return ky.create({...this.kyOptions, fetch: fetchImpl})
+      })()
+    }
+
+    return this.clientPromise
   }
 
   /**
@@ -188,6 +207,7 @@ export class HerokuApiClient {
       kyOptions.json = options.body
     }
 
-    return this.client(cleanPath, kyOptions)
+    const client = await this.getClient()
+    return client(cleanPath, kyOptions)
   }
 }
