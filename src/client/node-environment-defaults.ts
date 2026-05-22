@@ -35,28 +35,26 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions {
 }
 
 /**
- * Get a fetch implementation suitable for Node.
+ * Get an undici Dispatcher that routes Node's fetch through an
+ * `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`-aware proxy agent.
  *
- * Wraps the global fetch to route through `undici.EnvHttpProxyAgent`
- * when one of `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` is set, so
- * proxy support "just works" for both `HerokuApiClient` and
- * downstream callers that use this fetch directly. Returns the
- * native fetch unchanged if undici can't be loaded (e.g. on a
- * non-Node runtime that exposes `process.versions.node`, like Bun).
+ * Returns `undefined` if undici isn't loadable (e.g. on a non-Node
+ * runtime like Bun that exposes `process.versions.node` but doesn't
+ * ship undici); callers should skip the option in that case so ky
+ * falls back to native fetch.
+ *
+ * ky forwards the `dispatcher` option through to the underlying
+ * fetch — see https://github.com/sindresorhus/ky#proxy-support-nodejs.
  */
-export async function getDefaultFetch(): Promise<typeof fetch> {
-  let dispatcher: unknown
+export async function getDefaultDispatcher(): Promise<undefined | unknown> {
   try {
-    // undici is a Node built-in (no static types in this package's
-    // dep tree); the dynamic import keeps it out of browser bundles.
-    // @ts-expect-error — module resolution skips undici intentionally
-    // eslint-disable-next-line import/no-unresolved
+    // Dynamic import keeps undici out of browser bundles (the
+    // package.json `browser` condition resolves this whole module
+    // away in browser builds).
     const {EnvHttpProxyAgent} = await import('undici')
-    dispatcher = new EnvHttpProxyAgent()
+    return new EnvHttpProxyAgent()
   } catch (error) {
-    debugRequest('undici not available; using native fetch (%o)', error)
-    return fetch
+    debugRequest('undici not available; skipping dispatcher (%o)', error)
+    return undefined
   }
-
-  return (input, init) => fetch(input, {...init, dispatcher} as never)
 }

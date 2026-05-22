@@ -20,11 +20,13 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
 }
 
 /**
- * Get a fetch implementation suitable for the browser.
+ * Get a default dispatcher for the browser.
  *
- * Returns the native fetch unchanged. Browsers handle User-Agent
- * themselves and route through their own proxy stack.
+ * Always `undefined`. Browsers route through their own proxy stack
+ * (OS / browser settings), and the `dispatcher` option is undici-
+ * specific anyway — passing it would be ignored or could surface as
+ * a TypeError in some bundlers.
  */
-export async function getDefaultFetch(): Promise<typeof fetch> {
-  return fetch
+export async function getDefaultDispatcher(): Promise<undefined> {
+  return undefined
 }

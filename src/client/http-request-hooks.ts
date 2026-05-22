@@ -22,7 +22,7 @@ export function createBeforeRequestHook(
   customHeaders?: Record<string, string>,
   debug?: boolean,
 ): BeforeRequestHook {
-  return async request => {
+  return async ({request}) => {
     // Apply the service's default Accept header when the caller
     // hasn't set one. Services that don't declare one (e.g. `custom`)
     // skip this entirely.
@@ -64,7 +64,7 @@ export function createAfterResponseHook(
   twoFactorOptions: TwoFactorOptions | undefined,
   twoFactorAttemptedRef: {value: boolean},
 ): AfterResponseHook {
-  return async (request, options, response) => {
+  return async ({request, response}) => {
     debugResponse('%s %s -> %d', request.method, request.url, response.status)
 
     // Handle 2FA challenge (can be 403 or 412)

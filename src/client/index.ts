@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {getDefaultDispatcher, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -58,8 +58,8 @@ export class HerokuApiClient {
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
     // Stash the ky options; the actual ky instance is built lazily so
-    // we can await getDefaultFetch() (Node loads undici dynamically
-    // for env-var proxy support).
+    // we can await getDefaultDispatcher() (Node loads undici
+    // dynamically for env-var proxy support).
     this.kyOptions = {
       hooks: {
         afterResponse: [
@@ -77,7 +77,7 @@ export class HerokuApiClient {
           ),
         ],
       },
-      prefixUrl: baseUrl,
+      prefix: baseUrl,
       timeout: this.options.timeout,
     }
   }
@@ -143,9 +143,6 @@ export class HerokuApiClient {
   public async stream(path: string, options?: RequestOptions): Promise<Response> {
     debugRequest('STREAM %s', path)
 
-    // Remove leading slash for ky's prefixUrl
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path
-
     const kyOptions: KyOptions = {
       headers: options?.headers,
       method: 'GET',
@@ -154,18 +151,26 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return client(cleanPath, kyOptions)
+    return client(path, kyOptions)
   }
 
   /**
-   * Lazily construct ky with the env-aware fetch from environment-defaults.
+   * Lazily construct ky with an env-aware undici dispatcher (Node)
+   * or no dispatcher (browser). ky forwards the dispatcher option
+   * through to the underlying fetch — see
+   * https://github.com/sindresorhus/ky#proxy-support-nodejs.
    * Cached after the first call.
    */
   private async getClient(): Promise<KyInstance> {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
-        const fetchImpl = await getDefaultFetch()
-        return ky.create({...this.kyOptions, fetch: fetchImpl})
+        const dispatcher = await getDefaultDispatcher()
+        // ky's type definitions don't include `dispatcher`; it's
+        // passed through to fetch as undici expects it.
+        const opts: KyOptions = dispatcher
+          ? ({...this.kyOptions, dispatcher} as never)
+          : this.kyOptions
+        return ky.create(opts)
       })()
     }
 
@@ -194,9 +199,6 @@ export class HerokuApiClient {
     path: string,
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
-    // Remove leading slash for ky's prefixUrl
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path
-
     const kyOptions: KyOptions = {
       headers: options?.headers,
       method: options?.method || 'GET',
@@ -209,6 +211,6 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return client(cleanPath, kyOptions)
+    return client(path, kyOptions)
   }
 }
