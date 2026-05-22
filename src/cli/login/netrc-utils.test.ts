@@ -1,74 +1,115 @@
-import {describe, expect, it} from 'vitest'
+import {
+  beforeEach, describe, expect, it, vi,
+} from 'vitest'
+
+// Mock netrc-parser so the tests don't read or write the real ~/.netrc.
+// The mock keeps an in-memory `machines` map and no-ops load/save.
+vi.mock('netrc-parser', () => {
+  class Netrc {
+    machines: Record<string, Record<string, string> | undefined> = {}
+
+    load() {
+      return Promise.resolve()
+    }
+
+    loadSync() {}
+
+    save() {
+      return Promise.resolve({})
+    }
+
+    saveSync() {/* no-op */}
+  }
+
+  return {Netrc}
+})
 
 import {
   clearTokens, getNetrc, getStoredLogin, getStoredToken, saveToken,
 } from './netrc-utils.js'
 
-describe('Netrc utilities', () => {
-  describe('getNetrc', () => {
-    it('should return a Netrc instance', () => {
-      const netrc = getNetrc()
-      expect(netrc).toBeDefined()
-      expect(typeof netrc).toBe('object')
-    })
+const API_HOST = 'api.heroku.com'
+const GIT_HOST = 'git.heroku.com'
 
-    it('should return the same instance on subsequent calls', () => {
-      const netrc1 = getNetrc()
-      const netrc2 = getNetrc()
-      expect(netrc1).toBe(netrc2)
+describe('Netrc utilities', () => {
+  beforeEach(() => {
+    // Reset the in-memory machines on the singleton between tests.
+    const netrc = getNetrc()
+    for (const host of Object.keys(netrc.machines)) {
+      delete netrc.machines[host]
+    }
+  })
+
+  describe('getNetrc', () => {
+    it('returns the same instance on subsequent calls', () => {
+      expect(getNetrc()).toBe(getNetrc())
     })
   })
 
   describe('saveToken', () => {
-    it('should be a function', () => {
-      expect(typeof saveToken).toBe('function')
-    })
-
-    it('should return a promise', () => {
-      const result = saveToken(
+    it('writes the entry to both api and git hosts', async () => {
+      await saveToken(
         {login: 'test@example.com', password: 'test-token'},
-        'api.heroku.com',
-        'git.heroku.com',
+        API_HOST,
+        GIT_HOST,
       )
-      expect(result).toBeInstanceOf(Promise)
-      // Clean up - we don't actually want to save during tests
-      result.catch(() => {})
+
+      const netrc = getNetrc()
+      expect(netrc.machines[API_HOST]).toMatchObject({
+        login: 'test@example.com',
+        password: 'test-token',
+      })
+      expect(netrc.machines[GIT_HOST]).toMatchObject({
+        login: 'test@example.com',
+        password: 'test-token',
+      })
     })
   })
 
   describe('clearTokens', () => {
-    it('should be a function', () => {
-      expect(typeof clearTokens).toBe('function')
-    })
+    it('removes entries for api and git hosts', async () => {
+      await saveToken(
+        {login: 'test@example.com', password: 'test-token'},
+        API_HOST,
+        GIT_HOST,
+      )
+      await clearTokens(API_HOST, GIT_HOST)
 
-    it('should return a promise', () => {
-      const result = clearTokens('api.heroku.com', 'git.heroku.com')
-      expect(result).toBeInstanceOf(Promise)
-      result.catch(() => {})
+      const netrc = getNetrc()
+      expect(netrc.machines[API_HOST]).toBeUndefined()
+      expect(netrc.machines[GIT_HOST]).toBeUndefined()
     })
   })
 
   describe('getStoredToken', () => {
-    it('should be a function', () => {
-      expect(typeof getStoredToken).toBe('function')
+    it('returns the saved token', async () => {
+      await saveToken(
+        {login: 'test@example.com', password: 'test-token'},
+        API_HOST,
+        GIT_HOST,
+      )
+
+      expect(await getStoredToken(API_HOST)).toBe('test-token')
     })
 
-    it('should return a promise', () => {
-      const result = getStoredToken('api.heroku.com')
-      expect(result).toBeInstanceOf(Promise)
-      result.catch(() => {})
+    it('returns undefined when no entry exists', async () => {
+      expect(await getStoredToken(API_HOST)).toBeUndefined()
     })
   })
 
   describe('getStoredLogin', () => {
-    it('should be a function', () => {
-      expect(typeof getStoredLogin).toBe('function')
+    it('returns the saved login', async () => {
+      await saveToken(
+        {login: 'test@example.com', password: 'test-token'},
+        API_HOST,
+        GIT_HOST,
+      )
+
+      expect(await getStoredLogin(API_HOST)).toBe('test@example.com')
     })
 
-    it('should return a promise', () => {
-      const result = getStoredLogin('api.heroku.com')
-      expect(result).toBeInstanceOf(Promise)
-      result.catch(() => {})
+    it('returns undefined when no entry exists', async () => {
+      expect(await getStoredLogin(API_HOST)).toBeUndefined()
     })
   })
 })
