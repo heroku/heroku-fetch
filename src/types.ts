@@ -46,6 +46,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   /** Query parameters */
   searchParams?: Record<string, boolean | number | string>;
+  /** Aborts the in-flight request when the signal fires. */
+  signal?: AbortSignal;
   /** Enable streaming response */
   stream?: boolean;
   /** Request timeout override */
