@@ -114,6 +114,40 @@ describe('HerokuApiClient', () => {
       expect(typeof client.stream).toBe('function')
     })
   })
+
+  describe('AbortSignal forwarding', () => {
+    // Use an unroutable address so the request hangs in the connect
+    // phase, giving us a deterministic window in which to fire the
+    // abort. RFC 5737 reserves 192.0.2.0/24 for documentation; nothing
+    // listens there and connect attempts won't resolve quickly.
+    const HANGING_URL = 'http://192.0.2.1'
+
+    it('rejects an in-flight request when the signal is aborted', async () => {
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        timeout: 60_000,
+        token: 'test',
+      })
+      const controller = new AbortController()
+      const pending = client.get('/never', {signal: controller.signal})
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+
+    it('rejects an in-flight stream when the signal is aborted', async () => {
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        timeout: 60_000,
+        token: 'test',
+      })
+      const controller = new AbortController()
+      const pending = client.stream('/never', {signal: controller.signal})
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+  })
 })
 
 describe('SERVICE_CONFIGS', () => {

@@ -147,6 +147,7 @@ export class HerokuApiClient {
       headers: options?.headers,
       method: 'GET',
       searchParams: options?.searchParams,
+      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 
@@ -200,6 +201,7 @@ export class HerokuApiClient {
       headers: options?.headers,
       method: options?.method || 'GET',
       searchParams: options?.searchParams,
+      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 

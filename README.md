@@ -214,6 +214,34 @@ const response = await client.get('/apps', {
 });
 ```
 
+### Cancellation
+
+Pass an `AbortSignal` to cancel an in-flight request. Aborting rejects the
+returned promise with an `AbortError`:
+
+```typescript
+const controller = new AbortController();
+
+// Cancel after 2 seconds
+const timer = setTimeout(() => controller.abort(), 2000);
+
+try {
+  const response = await client.get('/apps', {signal: controller.signal});
+  const apps = await response.json();
+  clearTimeout(timer);
+  console.log(apps);
+} catch (error) {
+  if ((error as Error).name === 'AbortError') {
+    console.log('Request cancelled');
+  } else {
+    throw error;
+  }
+}
+```
+
+`signal` is also forwarded to `client.stream()`, so the same controller can
+cancel a long-lived streaming response.
+
 ## Streaming
 
 Stream data from endpoints like Logplex:
