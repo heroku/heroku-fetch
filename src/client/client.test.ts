@@ -132,7 +132,7 @@ describe('HerokuApiClient', () => {
       const controller = new AbortController()
       const pending = client.get('/never', {signal: controller.signal})
       controller.abort()
-      await expect(pending).rejects.toThrow()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
     })
 
     it('rejects an in-flight stream when the signal is aborted', async () => {
@@ -145,7 +145,7 @@ describe('HerokuApiClient', () => {
       const controller = new AbortController()
       const pending = client.stream('/never', {signal: controller.signal})
       controller.abort()
-      await expect(pending).rejects.toThrow()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
     })
   })
 })
