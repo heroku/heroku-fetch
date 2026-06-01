@@ -1,0 +1,14 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "version-file": "package.json",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["README.md"],
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
+    }
+  },
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "39adadad3912aa4be5aaf2f6474d6541e38390a3"
+}
