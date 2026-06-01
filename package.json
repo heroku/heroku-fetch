@@ -48,19 +48,19 @@
     "undici": "^6.25.0"
   },
   "optionalDependencies": {
-    "@heroku/heroku-cli-util": "^10.8.0",
+    "@heroku/heroku-cli-util": "^10.8.1",
     "netrc-parser": "^3.1.6",
     "open": "^11.0.0"
   },
   "devDependencies": {
     "@heroku-cli/test-utils": "^0.2.0",
-    "@oclif/core": "^4.10.5",
+    "@oclif/core": "^4.11.4",
     "@types/debug": "^4.1.12",
     "@types/node": "^20.11.19",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.39.4",
-    "eslint-config-oclif": "^6.0.152",
-    "tsx": "^4.7.1",
+    "eslint-config-oclif": "^6.0.167",
+    "tsx": "^4.22.4",
     "typescript": "^5.3.3",
     "vitest": "^4.1.6"
   },
