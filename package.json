@@ -40,6 +40,10 @@
     "fetch",
     "typescript"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heroku/heroku-fetch"
+  },
   "author": "Heroku",
   "license": "Apache-2.0",
   "dependencies": {
