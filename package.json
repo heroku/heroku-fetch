@@ -42,6 +42,14 @@
   ],
   "author": "Heroku",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heroku/heroku-fetch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/heroku/heroku-fetch/issues"
+  },
+  "homepage": "https://github.com/heroku/heroku-fetch#readme",
   "dependencies": {
     "debug": "^4.3.4",
     "ky": "^2.0.2",
