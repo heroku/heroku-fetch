@@ -64,7 +64,7 @@
     "@heroku-cli/test-utils": "^0.2.0",
     "@oclif/core": "^4.10.5",
     "@types/debug": "^4.1.12",
-    "@types/node": "^20.11.19",
+    "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^9.39.4",
     "eslint-config-oclif": "^6.0.152",
