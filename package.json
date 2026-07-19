@@ -53,7 +53,7 @@
   "dependencies": {
     "debug": "^4.3.4",
     "ky": "^2.0.2",
-    "undici": "^6.25.0"
+    "undici": "^8.7.0"
   },
   "optionalDependencies": {
     "@heroku/heroku-cli-util": "^10.8.0",
