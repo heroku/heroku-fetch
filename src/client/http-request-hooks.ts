@@ -14,6 +14,32 @@ import {handleErrorResponse} from './http-error-handler.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
 
 /**
+ * Headers whose values must never appear in debug output. Compared
+ * case-insensitively. Mirrors the redaction in http-call so tokens
+ * aren't leaked when `debug` is enabled.
+ */
+const SENSITIVE_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'heroku-two-factor-code',
+  'proxy-authorization',
+  'x-addon-sso',
+])
+
+/**
+ * Build a plain object of a request's headers with sensitive values
+ * replaced by `[REDACTED]`, safe for debug logging.
+ */
+function redactHeaders(headers: Headers): Record<string, string> {
+  const result: Record<string, string> = {}
+  // eslint-disable-next-line unicorn/no-array-for-each
+  headers.forEach((value, key) => {
+    result[key] = SENSITIVE_HEADERS.has(key.toLowerCase()) ? '[REDACTED]' : value
+  })
+  return result
+}
+
+/**
  * Create a beforeRequest hook that adds authentication and custom headers
  */
 export function createBeforeRequestHook(
@@ -37,7 +63,16 @@ export function createBeforeRequestHook(
       }
     }
 
-    // Add authorization header
+    // Add authorization header.
+    //
+    // We deliberately don't strip this on cross-origin redirects: the
+    // underlying fetch implementation does it for us. Per the WHATWG
+    // Fetch spec, `Authorization` (along with `Cookie`,
+    // `Proxy-Authorization`, and `Host`) is dropped before following a
+    // redirect to a different origin. Note this only covers those
+    // spec'd headers — if we ever add a custom sensitive header (e.g.
+    // `x-addon-sso`), fetch will NOT strip it and we'd need to handle
+    // that ourselves.
     const token = await getToken()
     if (token) {
       request.headers.set('Authorization', `Bearer ${token}`)
@@ -46,13 +81,7 @@ export function createBeforeRequestHook(
 
     debugRequest('%s %s', request.method, request.url)
     if (debug) {
-      const headers: Record<string, string> = {}
-      // eslint-disable-next-line unicorn/no-array-for-each
-      request.headers.forEach((value, key) => {
-        headers[key] = value
-      })
-
-      debugRequest('Headers: %O', headers)
+      debugRequest('Headers: %O', redactHeaders(request.headers))
     }
   }
 }
