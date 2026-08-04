@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.1...heroku-fetch-v0.1.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* redact sensitive headers in debug logs ([#44](https://github.com/heroku/heroku-fetch/issues/44)) ([0248ae1](https://github.com/heroku/heroku-fetch/commit/0248ae173a1da375dbb89bb9ffef066fa96aa3e0))
+
 ## [0.1.1](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.0...heroku-fetch-v0.1.1) (2026-07-16)
 
 
