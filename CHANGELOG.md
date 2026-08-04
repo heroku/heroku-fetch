@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.2...heroku-fetch-v0.1.3) (2026-08-04)
+
+
+### Dependencies
+
+* bump @heroku/heroku-cli-util from 10.8.0 to 10.9.2 ([#39](https://github.com/heroku/heroku-fetch/issues/39)) ([bfd0fa8](https://github.com/heroku/heroku-fetch/commit/bfd0fa88e18d693577684f18d556139391a1427b))
+* bump undici from 6.27.0 to 6.28.0 ([#48](https://github.com/heroku/heroku-fetch/issues/48)) ([7c051c2](https://github.com/heroku/heroku-fetch/commit/7c051c2c6863a574378d2f9a93a98ef46b7fe999))
+
 ## [0.1.2](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.1...heroku-fetch-v0.1.2) (2026-08-04)
 
 
