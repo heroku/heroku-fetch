@@ -25,6 +25,8 @@ export interface ServiceConfig {
 export interface HerokuApiClientOptions {
   /** Custom base URL (for 'custom' service type) */
   baseUrl?: string;
+  /** Enable debugging */
+  debug?: boolean;
   /**
    * Override the service's default `Accept` header for this client. Applied
    * only when a request doesn't already carry an `Accept` (so per-call
@@ -34,8 +36,6 @@ export interface HerokuApiClientOptions {
    * dispatch at that variant without changing the shared service default.
    */
   defaultAccept?: string;
-  /** Enable debugging */
-  debug?: boolean;
   /** Additional custom headers */
   headers?: Record<string, string>;
   /** Service region (e.g., 'eu', 'us') */
