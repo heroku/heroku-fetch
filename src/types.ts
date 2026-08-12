@@ -25,6 +25,15 @@ export interface ServiceConfig {
 export interface HerokuApiClientOptions {
   /** Custom base URL (for 'custom' service type) */
   baseUrl?: string;
+  /**
+   * Override the service's default `Accept` header for this client. Applied
+   * only when a request doesn't already carry an `Accept` (so per-call
+   * `withHeaders({Accept})` still wins); falls back to the service config's
+   * default when unset. Lets a consumer whose types/routes are generated from
+   * a specific API variant (e.g. `@heroku/sdk`, generated from `version=3.sdk`)
+   * dispatch at that variant without changing the shared service default.
+   */
+  defaultAccept?: string;
   /** Enable debugging */
   debug?: boolean;
   /** Additional custom headers */
