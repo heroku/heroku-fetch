@@ -71,7 +71,9 @@ export class HerokuApiClient {
         beforeRequest: [
           createBeforeRequestHook(
             () => this.getToken(),
-            serviceConfig.defaultAccept,
+            // A per-client override wins over the shared service default, but
+            // is still only applied when the request has no Accept of its own.
+            options.defaultAccept ?? serviceConfig.defaultAccept,
             options.headers,
             this.options.debug,
           ),

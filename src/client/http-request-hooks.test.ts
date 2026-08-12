@@ -78,4 +78,46 @@ describe('createBeforeRequestHook', () => {
 
     expect(headers).toBeUndefined()
   })
+
+  describe('default Accept header', () => {
+    it('applies the resolved default when the request has no Accept', async () => {
+      const hook = createBeforeRequestHook(
+        async () => {},
+        'application/vnd.heroku+json; version=3.sdk',
+        undefined,
+        false,
+      )
+      const request = new Request('https://api.heroku.com/apps')
+
+      await hook({options: {} as NormalizedOptions, request})
+
+      expect(request.headers.get('Accept')).toBe('application/vnd.heroku+json; version=3.sdk')
+    })
+
+    it('does not clobber an Accept the caller already set (per-call withHeaders wins)', async () => {
+      const hook = createBeforeRequestHook(
+        async () => {},
+        'application/vnd.heroku+json; version=3.sdk',
+        undefined,
+        false,
+      )
+      const request = new Request('https://api.heroku.com/apps', {
+        headers: {Accept: 'application/vnd.heroku+json; version=3'},
+      })
+
+      await hook({options: {} as NormalizedOptions, request})
+
+      // The per-request Accept survives; the default is only a fallback.
+      expect(request.headers.get('Accept')).toBe('application/vnd.heroku+json; version=3')
+    })
+
+    it('applies no Accept when neither a default nor a request Accept is present', async () => {
+      const hook = createBeforeRequestHook(async () => {}, undefined, undefined, false)
+      const request = new Request('https://api.heroku.com/apps')
+
+      await hook({options: {} as NormalizedOptions, request})
+
+      expect(request.headers.has('Accept')).toBe(false)
+    })
+  })
 })

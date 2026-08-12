@@ -1,4 +1,8 @@
-import {describe, expect, it} from 'vitest'
+import {createServer, type Server} from 'node:http'
+import {type AddressInfo} from 'node:net'
+import {
+  afterEach, beforeEach, describe, expect, it,
+} from 'vitest'
 
 import {HerokuApiClient} from './index.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
@@ -146,6 +150,58 @@ describe('HerokuApiClient', () => {
       const pending = client.stream('/never', {signal: controller.signal})
       controller.abort()
       await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+  })
+
+  describe('defaultAccept option', () => {
+    // Capture the Accept header the client actually puts on the wire, so
+    // these exercise the constructor wiring rather than the hook in isolation.
+    let server: Server
+    let baseUrl: string
+    let received: string | undefined
+
+    beforeEach(async () => {
+      server = createServer((request, response) => {
+        received = request.headers.accept
+        response.writeHead(200, {'Content-Type': 'application/json'})
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('sends the per-client override in place of the service default', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        defaultAccept: 'application/vnd.heroku+json; version=3.sdk',
+        service: 'platform',
+        token: 'test',
+      })
+
+      await client.get('/apps')
+
+      expect(received).toBe('application/vnd.heroku+json; version=3.sdk')
+    })
+
+    it('falls back to the service default when no override is given', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'platform',
+        token: 'test',
+      })
+
+      await client.get('/apps')
+
+      expect(received).toBe('application/vnd.heroku+json; version=3')
     })
   })
 })
