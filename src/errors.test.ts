@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest'
 
+import type {HerokuErrorResponse} from './types.js'
+
 import {
   AuthenticationError,
   HerokuApiError,
@@ -43,6 +45,24 @@ describe('Error classes', () => {
         id: 'server_error',
       })
       expect(error.resource).toBeUndefined()
+    })
+
+    it('preserves the full parsed error body, including service-specific fields', () => {
+      const errorBody = {
+        id: 'server_error',
+        message: 'Boom',
+        reason: 'host_team_headroom',
+      } as HerokuErrorResponse
+      const error = new HerokuApiError('Boom', 503, undefined, errorBody)
+      expect(error.body).toEqual(errorBody)
+      // A field with no promoted property (here `reason`) still survives on the
+      // raw body, so callers can read service-specific error codes.
+      expect((error.body as {reason?: string}).reason).toBe('host_team_headroom')
+    })
+
+    it('leaves body undefined when no error body is provided', () => {
+      const error = new HerokuApiError('Test error', 500)
+      expect(error.body).toBeUndefined()
     })
   })
 

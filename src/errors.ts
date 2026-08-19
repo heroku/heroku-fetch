@@ -1,6 +1,15 @@
 import type {HerokuErrorResponse} from './types.js'
 
 export class HerokuApiError extends Error {
+  /**
+   * The parsed JSON error body as the service returned it, when the response
+   * carried a JSON content-type. Unlike the promoted `id` / `errors` /
+   * `resource` fields, this preserves the whole body — including
+   * service-specific fields (e.g. a machine `reason` on an admin endpoint) that
+   * don't have a dedicated property. `undefined` when the body was absent or not
+   * JSON. Once read here, the streamed `response` body is consumed.
+   */
+  public body?: HerokuErrorResponse
   public errors?: Array<{id: string; message: string}>
   public id?: string
   public resource?: string
@@ -14,6 +23,7 @@ export class HerokuApiError extends Error {
     this.response = response
 
     if (errorBody) {
+      this.body = errorBody
       this.id = errorBody.id
       this.errors = errorBody.errors
       this.resource = errorBody.resource
