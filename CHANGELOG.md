@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.3...heroku-fetch-v0.1.4) (2026-08-21)
+
+
+### Features
+
+* add per-client defaultAccept override ([#57](https://github.com/heroku/heroku-fetch/issues/57)) ([0e31438](https://github.com/heroku/heroku-fetch/commit/0e31438bf731416ca8cb5f54a45a36a8aaf89c13))
+* preserve the full parsed error body on HerokuApiError ([#59](https://github.com/heroku/heroku-fetch/issues/59)) ([7ddc3d0](https://github.com/heroku/heroku-fetch/commit/7ddc3d048affe6df444aa8650e4e9749113853c5))
+
 ## [0.1.3](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.2...heroku-fetch-v0.1.3) (2026-08-04)
 
 
