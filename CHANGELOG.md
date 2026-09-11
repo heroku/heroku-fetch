@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.4...heroku-fetch-v0.1.5) (2026-09-11)
+
+
+### Dependencies
+
+* bump @heroku/heroku-cli-util from 10.9.2 to 10.10.0 ([#61](https://github.com/heroku/heroku-fetch/issues/61)) ([504c4d7](https://github.com/heroku/heroku-fetch/commit/504c4d7b8da7ef3249809b1a3b2d0856ba5c7065))
+
 ## [0.1.4](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.3...heroku-fetch-v0.1.4) (2026-08-21)
 
 
