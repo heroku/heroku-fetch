@@ -23,15 +23,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:coverage:report": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run build"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text-summary --coverage.reporter=lcovonly",
+    "prepare": "npm run build"
   },
   "keywords": [
     "heroku",
@@ -68,6 +67,7 @@
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^9.39.4",
     "eslint-config-oclif": "^6.0.152",
+    "rimraf": "^6.1.3",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3",
     "vitest": "^4.1.6"
