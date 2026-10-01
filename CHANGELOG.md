@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.5...heroku-fetch-v0.1.6) (2026-10-01)
+
+
+### Dependencies
+
+* bump ky from 2.0.2 to 2.1.0 ([#70](https://github.com/heroku/heroku-fetch/issues/70)) ([8658379](https://github.com/heroku/heroku-fetch/commit/86583798436d833254c5e90c70c3bcc0bb890dbc))
+* bump undici from 6.28.0 to 8.11.2 ([#71](https://github.com/heroku/heroku-fetch/issues/71)) ([61cc2ec](https://github.com/heroku/heroku-fetch/commit/61cc2ec550880a827fb501a1c3d716c93d61d4f4))
+
 ## [0.1.5](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.4...heroku-fetch-v0.1.5) (2026-09-22)
 
 
