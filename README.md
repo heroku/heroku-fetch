@@ -27,7 +27,7 @@ npm install @heroku/heroku-fetch
 import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 // Create a client for the Platform API
-// Automatically uses token from HEROKU_API_KEY env var or ~/.netrc
+// Automatically uses token from the HEROKU_API_KEY env var
 const client = new HerokuApiClient({
   service: 'platform',
 });
@@ -78,29 +78,33 @@ const customClient = new HerokuApiClient({
 
 ## Authentication
 
-### Automatic Token from Environment or Netrc (Default)
+### Automatic Token from Environment (Default)
 
-By default, the client automatically fetches tokens from `HEROKU_API_KEY` environment variable or `~/.netrc` file. **No manual token management required!**
+By default, the client reads the token from the `HEROKU_API_KEY` environment variable:
 
 ```typescript
 import { HerokuApiClient } from '@heroku/heroku-fetch';
 
-// Token automatically loaded from HEROKU_API_KEY or ~/.netrc
+// Token automatically loaded from HEROKU_API_KEY
 const client = new HerokuApiClient({
   service: 'platform',
 });
 ```
 
-The token priority is:
-1. `HEROKU_API_KEY` environment variable
-2. `~/.netrc` file (api.heroku.com machine)
-
-If you need to manually retrieve the token for other purposes, you can use `getAuthToken()`:
+heroku-fetch does not read stored CLI credentials. To authenticate with
+credentials saved by the Heroku CLI (native credential store or `~/.netrc`),
+resolve a token with [`@heroku/heroku-credential-manager`](https://github.com/heroku/heroku-credential-manager)
+and pass it to the client:
 
 ```typescript
-import { getAuthToken } from '@heroku/heroku-fetch';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
+import { getAuth } from '@heroku/heroku-credential-manager';
 
-const token = getAuthToken(); // Returns string | undefined
+const { token } = await getAuth(undefined, 'api.heroku.com');
+const client = new HerokuApiClient({
+  service: 'platform',
+  token,
+});
 ```
 
 ### Static Bearer Token
@@ -117,15 +121,6 @@ const client = new HerokuApiClient({
 Use a function to dynamically retrieve or refresh tokens:
 
 ```typescript
-import { getAuthTokenProvider } from '@heroku/heroku-fetch';
-
-// Option 1: Use the built-in provider for dynamic token fetching
-const client = new HerokuApiClient({
-  service: 'platform',
-  token: getAuthTokenProvider(), // Returns a function that fetches token each time
-});
-
-// Option 2: Provide your own custom token function
 const client = new HerokuApiClient({
   service: 'platform',
   token: async () => {
@@ -487,7 +482,7 @@ import { HerokuApiClient } from '@heroku/heroku-fetch';
 
 export default class AppsList extends Command {
   async run() {
-    // Client automatically uses token from env or netrc
+    // Client automatically uses token from the HEROKU_API_KEY env var
     const client = new HerokuApiClient({
       service: 'platform',
     });

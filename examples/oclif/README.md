@@ -5,7 +5,7 @@ This directory contains complete examples of using `heroku-fetch` in oclif-based
 ## Overview
 
 These examples demonstrate:
-- ✅ Automatic token management from `HEROKU_API_KEY` or `~/.netrc`
+- ✅ Automatic token management from `HEROKU_API_KEY`
 - ✅ GET, POST, DELETE requests
 - ✅ Streaming responses (logs)
 - ✅ Multiple services (platform API, data API)
@@ -21,15 +21,15 @@ All examples use automatic authentication. **No manual token management needed!*
 ```typescript
 import { HerokuApiClient } from '@heroku/heroku-fetch';
 
-// Client automatically gets token from:
-// 1. HEROKU_API_KEY environment variable (priority)
-// 2. ~/.netrc file (fallback)
+// Client automatically gets the token from the HEROKU_API_KEY environment variable
 const client = new HerokuApiClient({
   service: 'platform',
 });
 ```
 
-The client handles everything automatically - no need to call `getAuthToken()` yourself!
+To authenticate with credentials saved by the Heroku CLI, resolve a token with
+[`@heroku/heroku-credential-manager`](https://github.com/heroku/heroku-credential-manager)
+and pass it to the client.
 
 ## Examples
 
@@ -201,7 +201,7 @@ src/
 
 The examples use the pattern:
 ```typescript
-import { HerokuApiClient, getAuthToken } from '@heroku/heroku-fetch';
+import { HerokuApiClient } from '@heroku/heroku-fetch';
 ```
 
 This works out of the box - no additional setup needed!
@@ -224,7 +224,7 @@ import { HerokuApiClient, HerokuApiError } from '@heroku/heroku-fetch';
 
 export default class MyCommand extends Command {
   async run() {
-    // Client automatically uses token from env or netrc
+    // Client automatically uses token from the HEROKU_API_KEY env var
     const client = new HerokuApiClient({
       service: 'platform',
     });

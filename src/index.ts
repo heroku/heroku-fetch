@@ -1,10 +1,7 @@
 export {
   getApiHost,
   getApiUrl,
-  getAuthToken,
-  getAuthTokenProvider,
 } from './auth/auth.js'
-export {Login} from './cli/cli-login.js'
 export {
   cliTwoFactorPrompt,
   createCliTwoFactorPrompt,

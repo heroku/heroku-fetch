@@ -1,6 +1,5 @@
 /**
  * Default providers for Node.js environments
- * These use file system (netrc) and CLI utilities
  */
 
 import type {TokenProvider, TwoFactorOptions} from '../types.js'
@@ -9,14 +8,17 @@ import {debugRequest} from '../debug-loggers.js'
 import {logScrubbed} from '../redact.js'
 
 /**
- * Get default token provider for Node.js (uses netrc/env vars)
+ * Get default token provider for Node.js (reads the HEROKU_API_KEY env var)
+ *
+ * heroku-fetch does not read stored credentials. To authenticate with
+ * credentials saved by the Heroku CLI, resolve a token with the
+ * heroku-credential-manager package and pass it to the client explicitly.
  */
 export function getDefaultTokenProvider(): TokenProvider {
-  return async () => {
-    const {getAuthToken} = await import('../auth/auth.js')
-    const token = getAuthToken()
+  return () => {
+    const token = process.env.HEROKU_API_KEY
     if (!token) {
-      throw new Error('No authentication token found. Please set HEROKU_API_KEY or run: heroku login')
+      throw new Error('No authentication token found. Set HEROKU_API_KEY or pass a token to the client.')
     }
 
     return token

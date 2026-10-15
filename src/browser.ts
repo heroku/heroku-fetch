@@ -2,8 +2,7 @@
  * Browser-specific entry point for @heroku/heroku-fetch
  *
  * This entry point excludes Node.js-specific features like:
- * - CLI utilities (login, 2FA prompts)
- * - File system access (netrc)
+ * - CLI utilities (2FA prompts)
  * - Process environment variables
  *
  * Use this entry point when bundling for browser environments.

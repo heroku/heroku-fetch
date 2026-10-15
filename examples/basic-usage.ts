@@ -7,7 +7,7 @@
 
 import {HerokuApiClient, NotFoundError} from '../src/index.js'
 
-// Create client (automatically uses getAuthToken() by default)
+// Create client (automatically uses the HEROKU_API_KEY env var by default)
 const client = new HerokuApiClient({
   service: 'platform',
 })
