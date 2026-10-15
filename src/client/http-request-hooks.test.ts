@@ -12,6 +12,9 @@ describe('createBeforeRequestHook', () => {
 
   beforeEach(() => {
     debugRequestSpy = vi.spyOn(debugLoggers, 'debugRequest').mockImplementation(() => true)
+    // logScrubbed() gates on the logger's `.enabled` flag; the mock fn
+    // doesn't carry one, so set it so the scrubbed header line is emitted.
+    Object.assign(debugRequestSpy, {enabled: true})
   })
 
   afterEach(() => {

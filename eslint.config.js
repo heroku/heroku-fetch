@@ -19,6 +19,15 @@ export default [
 
       // Prefer no semicolons unless necessary
       '@stylistic/semi': ['warn', 'never'],
+
+      // Never pass a raw object to a `debug*` logger with %O/%o — those
+      // interpolations dump unredacted secrets into DEBUG output. Route
+      // object logging through `logScrubbed` from src/redact.ts instead,
+      // which runs values through the js-blanket scrubber first.
+      'no-restricted-syntax': ['error', {
+        selector: 'CallExpression[callee.name=/^debug/] Literal[value=/%[Oo]/]',
+        message: 'Do not pass %O/%o to a debug* logger directly — use logScrubbed() from src/redact.ts so secrets are scrubbed first.',
+      }],
     },
   },
 

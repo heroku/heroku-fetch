@@ -8,6 +8,7 @@ import type {HerokuApiClient} from '../../client/index.js'
 import type {NetrcEntry, OAuthAuthorization} from './types.js'
 
 import {debugCliLogin} from '../../debug-loggers.js'
+import {logScrubbed} from '../../redact.js'
 import {THIRTY_DAYS} from './types.js'
 
 const hostname = os.hostname()
@@ -96,7 +97,7 @@ export async function getDefaultToken(client: HerokuApiClient): Promise<string |
       }
     }
 
-    debugCliLogin('Error fetching default authorization: %O', error)
+    await logScrubbed(debugCliLogin, 'Error fetching default authorization: %O', error)
     throw error
   }
 }
@@ -116,7 +117,7 @@ export async function deleteOAuthTokens(
     .then(() => {
       debugCliLogin('OAuth session deleted successfully')
     })
-    .catch(error => {
+    .catch(async error => {
       if (error instanceof Error) {
         const errBody = (error as any).body
         if (
@@ -133,7 +134,7 @@ export async function deleteOAuthTokens(
         }
       }
 
-      debugCliLogin('Error deleting OAuth session: %O', error)
+      await logScrubbed(debugCliLogin, 'Error deleting OAuth session: %O', error)
       throw error
     })
 
@@ -161,7 +162,7 @@ export async function deleteOAuthTokens(
         }))
       }
     })
-    .catch(error => {
+    .catch(async error => {
       if (error instanceof Error) {
         const errBody = (error as any).body
         if (errBody?.id === 'unauthorized') {
@@ -170,7 +171,7 @@ export async function deleteOAuthTokens(
         }
       }
 
-      debugCliLogin('Error deleting OAuth authorizations: %O', error)
+      await logScrubbed(debugCliLogin, 'Error deleting OAuth authorizations: %O', error)
       throw error
     })
 
