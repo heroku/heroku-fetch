@@ -1,6 +1,13 @@
 export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
 
-export type TokenProvider = (() => Promise<string> | string) | string
+/**
+ * A bearer token, or a function resolving one at request time. A provider may
+ * return `undefined` (sync or async) to send the request with no `Authorization`
+ * header — appropriate for endpoints or hosts that need no Heroku auth. Requests
+ * to endpoints that do require auth then receive a server 401, surfaced as
+ * `AuthenticationError`.
+ */
+export type TokenProvider = (() => Promise<string | undefined> | string | undefined) | string
 
 export interface TwoFactorOptions {
   /** Callback function to prompt for 2FA code */

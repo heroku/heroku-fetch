@@ -1,9 +1,10 @@
 /**
- * API host/URL utilities for Heroku API
+ * API host/URL utilities for the Heroku API — resolve the API host and base
+ * URL from `HEROKU_HOST`, falling back to the public defaults.
  *
- * Credential storage and retrieval (netrc, native credential stores) now lives
- * in @heroku/heroku-credential-manager. heroku-fetch no longer reads stored
- * credentials; supply a token to the client explicitly (see HerokuApiClient).
+ * Note: heroku-fetch does not read stored credentials. Credential storage and
+ * retrieval (netrc, native credential stores) lives in
+ * @heroku/heroku-credential-manager; supply a token to the client explicitly.
  */
 
 /**

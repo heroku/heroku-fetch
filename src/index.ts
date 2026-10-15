@@ -1,7 +1,7 @@
 export {
   getApiHost,
   getApiUrl,
-} from './auth/auth.js'
+} from './host.js'
 export {
   cliTwoFactorPrompt,
   createCliTwoFactorPrompt,

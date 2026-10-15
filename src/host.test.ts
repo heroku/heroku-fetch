@@ -2,7 +2,7 @@ import {
   afterEach, beforeEach, describe, expect, it,
 } from 'vitest'
 
-import {getApiHost, getApiUrl} from './auth.js'
+import {getApiHost, getApiUrl} from './host.js'
 
 describe('Auth utilities', () => {
   const originalEnv = process.env

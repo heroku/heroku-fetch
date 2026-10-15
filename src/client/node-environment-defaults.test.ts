@@ -14,14 +14,14 @@ describe('getDefaultTokenProvider', () => {
 
   it('returns the HEROKU_API_KEY env var', async () => {
     process.env.HEROKU_API_KEY = 'env-token'
-    const provider = getDefaultTokenProvider() as () => string
+    const provider = getDefaultTokenProvider() as () => string | undefined
     expect(await provider()).toBe('env-token')
   })
 
-  it('throws when HEROKU_API_KEY is not set', async () => {
+  it('returns undefined (no throw) when HEROKU_API_KEY is not set', async () => {
     delete process.env.HEROKU_API_KEY
-    const provider = getDefaultTokenProvider() as () => string
-    expect(() => provider()).toThrow(/No authentication token found/)
+    const provider = getDefaultTokenProvider() as () => string | undefined
+    expect(provider()).toBeUndefined()
   })
 })
 
