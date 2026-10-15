@@ -89,6 +89,50 @@ describe('scrubForLog', () => {
     expect(result.cause.secret).toBe('[REDACTED]')
   })
 
+  it('redacts credentials in a nested Response URL (userinfo and sensitive query params)', async () => {
+    const error = Object.assign(new Error('http error'), {
+      response: {
+        status: 302,
+        statusText: 'Found',
+        url: 'https://user:pass@example.com/sso?SAMLResponse=abc&nonce=xyz&page=2',
+      },
+    })
+
+    const result = await scrubForLog(error) as {response: {url: string}}
+    const url = new URL(result.response.url)
+
+    // Userinfo is percent-encoded in that position, so decode before comparing.
+    expect(decodeURIComponent(url.username)).toBe('[REDACTED]')
+    expect(decodeURIComponent(url.password)).toBe('[REDACTED]')
+    expect(url.searchParams.get('SAMLResponse')).toBe('[REDACTED]')
+    expect(url.searchParams.get('nonce')).toBe('[REDACTED]')
+    // Benign params are preserved.
+    expect(url.searchParams.get('page')).toBe('2')
+    expect(result.response.url).not.toContain('pass')
+    expect(result.response.url).not.toContain('abc')
+  })
+
+  it('caps cyclic cause recursion without crashing', async () => {
+    const a = new Error('a') as Error & {cause?: unknown}
+    const b = new Error('b') as Error & {cause?: unknown}
+    a.cause = b
+    b.cause = a
+
+    const result = await scrubForLog(a) as Record<string, unknown>
+
+    // Walk the scrubbed cause chain; it must terminate at the sentinel rather
+    // than recurse forever.
+    let node: Record<string, unknown> | undefined = result
+    let hops = 0
+    while (node && typeof node.cause === 'object') {
+      node = node.cause as Record<string, unknown>
+      hops++
+      expect(hops).toBeLessThan(50)
+    }
+
+    expect(node?.cause).toBe('[max cause depth exceeded]')
+  })
+
   it('passes primitives through untouched', async () => {
     expect(await scrubForLog('hello')).toBe('hello')
     expect(await scrubForLog(42)).toBe(42)

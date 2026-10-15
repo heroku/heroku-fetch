@@ -5,7 +5,7 @@
  * debug namespace is enabled so it stays off the default code path.
  */
 
-import type {Scrubber} from '@heroku/js-blanket/core/scrubber'
+import type {Scrubber as ScrubberType} from '@heroku/js-blanket/core/scrubber'
 
 /** Replacement token for redacted values. */
 const REPLACEMENT = '[REDACTED]'
@@ -20,22 +20,26 @@ const EXTRA_FIELDS: readonly string[] = [
   'second_factor',
   'otp',
   'sso',
-  '_url',
 ]
 
 /**
- * Redact inline `Bearer`/`Basic` credentials in string values (e.g. an error
- * message). Bare UUIDs/JWTs are intentionally not matched — they're
- * indistinguishable from benign resource IDs.
+ * Redact inline `Bearer`/`Basic` credentials in string leaf values reached
+ * while scrubbing an object or Error (e.g. an error message). Bare UUIDs/JWTs
+ * are intentionally not matched — they're indistinguishable from benign
+ * resource IDs. Note these patterns don't apply to a top-level string passed
+ * straight to `scrubForLog`.
  */
 const VALUE_PATTERNS: readonly RegExp[] = [
   /\b(?:Bearer|Basic)\s+[\w.~+/=-]+/gi,
 ]
 
-let scrubberPromise: Promise<Scrubber> | undefined
+/** Cap on `error.cause` recursion depth; guards against cyclic chains. */
+const MAX_CAUSE_DEPTH = 8
+
+let scrubberPromise: Promise<ScrubberType> | undefined
 
 /** Build the shared Scrubber once, importing js-blanket lazily. */
-async function getScrubber(): Promise<Scrubber> {
+async function getScrubber(): Promise<ScrubberType> {
   if (!scrubberPromise) {
     scrubberPromise = (async () => {
       const [{Scrubber}, {HEROKU_FIELDS}] = await Promise.all([
@@ -48,6 +52,11 @@ async function getScrubber(): Promise<Scrubber> {
         replacement: REPLACEMENT,
       })
     })()
+    // Don't cache a rejected import: clear it so a later call retries rather
+    // than degrading all object logging to '[unscrubbable]' for the process.
+    scrubberPromise.catch(() => {
+      scrubberPromise = undefined
+    })
   }
 
   return scrubberPromise
@@ -77,7 +86,7 @@ function redactUrl(url: unknown): unknown {
     if (u.username) u.username = REPLACEMENT
     if (u.password) u.password = REPLACEMENT
     for (const key of u.searchParams.keys()) {
-      if (/token|secret|code|sso|key|password|auth/i.test(key)) {
+      if (/token|secret|code|sso|key|password|auth|assertion|saml|signature|nonce|otp|credential/i.test(key)) {
         u.searchParams.set(key, REPLACEMENT)
       }
     }
@@ -94,9 +103,16 @@ function redactUrl(url: unknown): unknown {
  * dropped. Nested `Request`/`Response` are summarized rather than passed
  * through: they serialize to `{}` and a `Request` can carry live auth headers.
  */
-async function scrubError(error: Error): Promise<unknown> {
+async function scrubError(error: Error, depth: number): Promise<unknown> {
   const scrubber = await getScrubber()
-  const err = error as Error & Record<string, unknown>
+  // Index signature makes the extra own-properties `unknown` without flattening
+  // the known `message`/`name`/`stack` off `Error` (string wins over unknown).
+  const err = error as Error & {
+    [key: string]: unknown
+    cause?: unknown
+    request?: unknown
+    response?: unknown
+  }
   const {
     cause, message, name, request, response, stack, ...rest
   } = err
@@ -115,19 +131,27 @@ async function scrubError(error: Error): Promise<unknown> {
     normalized.request = {method: r.method, url: redactUrl(r.url)}
   }
 
-  const scrubbed = scrubber.scrub(normalized).data as Record<string, unknown>
-  if (cause !== undefined) scrubbed.cause = await scrubForLog(cause)
+  const scrubbed = scrubber.scrub(normalized).data
+  if (cause !== undefined) {
+    scrubbed.cause = depth >= MAX_CAUSE_DEPTH
+      ? '[max cause depth exceeded]'
+      : await scrubForLog(cause, depth + 1)
+  }
+
   return scrubbed
 }
 
 /**
  * Scrub a value for debug logging. Handles `Error`, `Headers`, plain objects,
- * and primitives (passed through). Fail-closed: any failure returns
- * `'[unscrubbable]'` rather than risking the raw value.
+ * and primitives (passed through unchanged — a top-level string is not
+ * pattern-scrubbed; `VALUE_PATTERNS` only apply to strings nested inside a
+ * scrubbed object/Error). Fail-closed: any failure returns `'[unscrubbable]'`
+ * rather than risking the raw value. `depth` is internal, for `cause`
+ * recursion.
  */
-export async function scrubForLog(value: unknown): Promise<unknown> {
+export async function scrubForLog(value: unknown, depth = 0): Promise<unknown> {
   try {
-    if (value instanceof Error) return await scrubError(value)
+    if (value instanceof Error) return await scrubError(value, depth)
     if (typeof Headers !== 'undefined' && value instanceof Headers) {
       const scrubber = await getScrubber()
       return scrubber.scrub(headersToObject(value)).data
@@ -145,9 +169,9 @@ export async function scrubForLog(value: unknown): Promise<unknown> {
 }
 
 /** A `debug` logger: a format call plus an `enabled` flag for its namespace. */
-interface DebugLike {
+export interface DebugLike {
   (formatter: string, ...args: unknown[]): void
-  enabled: boolean
+  readonly enabled: boolean
 }
 
 /**
