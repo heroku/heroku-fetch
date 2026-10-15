@@ -6,6 +6,7 @@
 import type {TokenProvider, TwoFactorOptions} from '../types.js'
 
 import {debugRequest} from '../debug-loggers.js'
+import {logScrubbed} from '../redact.js'
 
 /**
  * Get default token provider for Node.js (uses netrc/env vars)
@@ -63,7 +64,7 @@ export async function getDefaultDispatcher(): Promise<undefined | unknown> {
     const {EnvHttpProxyAgent} = await import('undici')
     return new EnvHttpProxyAgent()
   } catch (error) {
-    debugRequest('undici not available; skipping dispatcher (%o)', error)
+    await logScrubbed(debugRequest, 'undici not available; skipping dispatcher (%o)', error)
     return undefined
   }
 }

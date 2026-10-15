@@ -14,6 +14,7 @@ import {
   RateLimitError,
   TwoFactorRequiredError,
 } from '../errors.js'
+import {logScrubbed} from '../redact.js'
 
 /**
  * Parse and handle an error response from the API
@@ -31,7 +32,7 @@ export async function handleErrorResponse(response: Response): Promise<never> {
     // Failed to parse error body, continue without it
   }
 
-  debugError('Error response: %d %O', response.status, errorBody)
+  await logScrubbed(debugError, 'Error response: %d %O', response.status, errorBody)
 
   // Check for 2FA error (can be 403 or 412)
   if (

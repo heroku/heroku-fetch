@@ -29,6 +29,7 @@ import type {HerokuApiClient} from '../../client/index.js'
 import type {LoginConfig, LoginOptions, NetrcEntry} from './types.js'
 
 import {debugCliLogin} from '../../debug-loggers.js'
+import {logScrubbed} from '../../redact.js'
 import {browserLogin} from './browser-login.js'
 import {interactiveLogin} from './interactive-login.js'
 import {
@@ -98,7 +99,7 @@ export class Login {
   }
 
   async login(opts: LoginOptions = {}): Promise<void> {
-    debugCliLogin('Login initiated with options: %O', opts)
+    await logScrubbed(debugCliLogin, 'Login initiated with options: %O', opts)
     let loggedIn = false
     try {
       // timeout after 10 minutes
@@ -213,7 +214,7 @@ export class Login {
     try {
       await deleteOAuthTokens(this.heroku, token)
     } catch (error) {
-      debugCliLogin('Failed to delete OAuth tokens from API: %O', error)
+      await logScrubbed(debugCliLogin, 'Failed to delete OAuth tokens from API: %O', error)
       // Continue to clear netrc even if API call fails
     }
 

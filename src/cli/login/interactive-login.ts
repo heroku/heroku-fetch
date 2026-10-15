@@ -7,6 +7,7 @@ import {prompt} from '@heroku/heroku-cli-util/hux'
 import type {LoginConfig, NetrcEntry} from './types.js'
 
 import {debugCliLogin} from '../../debug-loggers.js'
+import {logScrubbed} from '../../redact.js'
 import {createOAuthToken} from './oauth.js'
 
 /**
@@ -57,11 +58,11 @@ export async function interactiveLogin(
         })
         debugCliLogin('OAuth token created successfully with 2FA')
       } else {
-        debugCliLogin('OAuth token creation failed: %O', error)
+        await logScrubbed(debugCliLogin, 'OAuth token creation failed: %O', error)
         throw error
       }
     } else {
-      debugCliLogin('Unexpected error during OAuth token creation: %O', error)
+      await logScrubbed(debugCliLogin, 'Unexpected error during OAuth token creation: %O', error)
       throw error
     }
   }

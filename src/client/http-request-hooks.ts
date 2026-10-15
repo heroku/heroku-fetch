@@ -10,34 +10,9 @@ import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 import type {TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
+import {logScrubbed} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
-
-/**
- * Headers whose values must never appear in debug output. Compared
- * case-insensitively. Mirrors the redaction in http-call so tokens
- * aren't leaked when `debug` is enabled.
- */
-const SENSITIVE_HEADERS = new Set([
-  'authorization',
-  'cookie',
-  'heroku-two-factor-code',
-  'proxy-authorization',
-  'x-addon-sso',
-])
-
-/**
- * Build a plain object of a request's headers with sensitive values
- * replaced by `[REDACTED]`, safe for debug logging.
- */
-function redactHeaders(headers: Headers): Record<string, string> {
-  const result: Record<string, string> = {}
-  // eslint-disable-next-line unicorn/no-array-for-each
-  headers.forEach((value, key) => {
-    result[key] = SENSITIVE_HEADERS.has(key.toLowerCase()) ? '[REDACTED]' : value
-  })
-  return result
-}
 
 /**
  * Create a beforeRequest hook that adds authentication and custom headers
@@ -81,7 +56,7 @@ export function createBeforeRequestHook(
 
     debugRequest('%s %s', request.method, request.url)
     if (debug) {
-      debugRequest('Headers: %O', redactHeaders(request.headers))
+      await logScrubbed(debugRequest, 'Headers: %O', request.headers)
     }
   }
 }

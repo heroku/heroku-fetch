@@ -7,6 +7,7 @@ import os from 'node:os'
 import type {Account, LoginConfig, NetrcEntry} from './types.js'
 
 import {debugCliLogin} from '../../debug-loggers.js'
+import {logScrubbed} from '../../redact.js'
 import {headers} from './types.js'
 
 const hostname = os.hostname()
@@ -59,7 +60,7 @@ async function fetchAuth(
       return fetchAuth(loginHost, cliUrl, token, retries - 1)
     }
 
-    debugCliLogin('Auth polling failed: %O', error)
+    await logScrubbed(debugCliLogin, 'Auth polling failed: %O', error)
     throw error
   }
 }
@@ -113,7 +114,10 @@ export async function browserLogin(
     ...(browser ? {app: {name: browser}} : {}),
   })
   cp.on('error', err => {
-    debugCliLogin('Browser open error: %O', err)
+    // Sync callback: fire-and-forget the async scrub. Logging is
+    // best-effort diagnostics, so we don't block the handler on it;
+    // `.catch` keeps the promise from floating.
+    logScrubbed(debugCliLogin, 'Browser open error: %O', err).catch(() => {})
     console.warn(err)
     showUrl()
   })
