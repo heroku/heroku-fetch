@@ -3,8 +3,9 @@
  * URL from `HEROKU_HOST`, falling back to the public defaults.
  *
  * Note: heroku-fetch does not read stored credentials. Credential storage and
- * retrieval (netrc, native credential stores) lives in
- * @heroku/heroku-credential-manager; supply a token to the client explicitly.
+ * retrieval (netrc, native credential stores) lives in the
+ * `@heroku/heroku-credential-manager` package; supply a token to the client
+ * explicitly.
  */
 
 /**
