@@ -1,32 +1,19 @@
 /**
  * Lazy, fail-closed secret scrubbing for DEBUG-gated log output.
  *
- * Wraps the team-standard scrubber `@heroku/js-blanket`. The scrubber is
- * loaded via dynamic `import()` the first time a debug namespace is actually
- * enabled, so non-debug consumers — including the browser build — never pull
- * it onto the default code path. See `SECURITY.md` on limiting runtime
- * dependencies: the dependency exists but stays off the default path.
- *
- * This module must stay Node-free: it is reachable from the browser entry.
+ * Wraps `@heroku/js-blanket`, loaded via dynamic `import()` the first time a
+ * debug namespace is enabled so it stays off the default code path.
  */
 
 import type {Scrubber} from '@heroku/js-blanket/core/scrubber'
 
-/**
- * Replacement token. Matches the prior hand-rolled redaction so existing
- * debug output and tests are unchanged.
- */
+/** Replacement token for redacted values. */
 const REPLACEMENT = '[REDACTED]'
 
 /**
- * Codebase-specific sensitive keys that `HEROKU_FIELDS` does not already
- * cover. Matched case-insensitively as substrings by js-blanket. The header
- * fields (`heroku-two-factor-code`, `x-addon-sso`) are part of `HEROKU_FIELDS`
- * as of js-blanket 1.2.0, so they are intentionally absent here. `code` is
- * deliberately excluded: as a substring it would also redact `statusCode` /
- * `errorCode` in logged error objects, and no object logged here carries a
- * secret under a `code` key (the 2FA code travels as the
- * `Heroku-Two-Factor-Code` header, covered by the preset).
+ * Extra sensitive keys the preset doesn't cover, matched case-insensitively as
+ * substrings. `code` is deliberately excluded so it doesn't also redact
+ * `statusCode`/`errorCode` in logged error objects.
  */
 const EXTRA_FIELDS: readonly string[] = [
   'secondfactor',
@@ -37,11 +24,9 @@ const EXTRA_FIELDS: readonly string[] = [
 ]
 
 /**
- * Narrow value pattern: redact inline `Bearer`/`Basic` credentials wherever
- * they appear in a string value (e.g. an error message), independent of the
- * field name. Deliberately not matching bare UUIDs/JWTs — Heroku's
- * UUID-shaped tokens are indistinguishable from benign resource IDs, so that
- * would be pure noise.
+ * Redact inline `Bearer`/`Basic` credentials in string values (e.g. an error
+ * message). Bare UUIDs/JWTs are intentionally not matched — they're
+ * indistinguishable from benign resource IDs.
  */
 const VALUE_PATTERNS: readonly RegExp[] = [
   /\b(?:Bearer|Basic)\s+[\w.~+/=-]+/gi,
@@ -49,9 +34,7 @@ const VALUE_PATTERNS: readonly RegExp[] = [
 
 let scrubberPromise: Promise<Scrubber> | undefined
 
-/**
- * Build the shared Scrubber once, importing js-blanket lazily.
- */
+/** Build the shared Scrubber once, importing js-blanket lazily. */
 async function getScrubber(): Promise<Scrubber> {
   if (!scrubberPromise) {
     scrubberPromise = (async () => {
@@ -71,10 +54,8 @@ async function getScrubber(): Promise<Scrubber> {
 }
 
 /**
- * Convert a `Headers` instance to a plain object. js-blanket (like
- * `JSON.stringify`) sees no enumerable own-properties on a `Headers`
- * instance, so scrubbing one directly yields `{}`; converting first preserves
- * the entries (keys are already lowercased by `Headers`).
+ * Convert a `Headers` instance to a plain object. Scrubbing one directly yields
+ * `{}` (no enumerable own-properties); converting first preserves the entries.
  */
 function headersToObject(headers: Headers): Record<string, string> {
   const out: Record<string, string> = {}
@@ -87,8 +68,7 @@ function headersToObject(headers: Headers): Record<string, string> {
 
 /**
  * Clear credentials embedded in a URL (userinfo and sensitive query values),
- * keeping host/path for diagnostics. Best-effort — returns the input
- * unchanged if it isn't a parseable URL string.
+ * keeping host/path. Returns the input unchanged if it isn't a parseable URL.
  */
 function redactUrl(url: unknown): unknown {
   if (typeof url !== 'string') return url
@@ -110,10 +90,9 @@ function redactUrl(url: unknown): unknown {
 
 /**
  * Normalize an `Error` into a plain, scrubbable object. An Error's own
- * `name`/`message`/`stack`/`cause` are non-enumerable, so passing an Error
- * straight through the scrubber (which deep-clones) would drop them and yield
- * `{}`. Nested `Request`/`Response` are summarized rather than passed through:
- * they serialize to `{}`, and a `Request` can carry live auth headers.
+ * `name`/`message`/`stack`/`cause` are non-enumerable and would otherwise be
+ * dropped. Nested `Request`/`Response` are summarized rather than passed
+ * through: they serialize to `{}` and a `Request` can carry live auth headers.
  */
 async function scrubError(error: Error): Promise<unknown> {
   const scrubber = await getScrubber()
@@ -136,21 +115,15 @@ async function scrubError(error: Error): Promise<unknown> {
     normalized.request = {method: r.method, url: redactUrl(r.url)}
   }
 
-  // Field matching scrubs sensitive keys in `rest`; value patterns scrub
-  // inline Bearer/Basic tokens in `message`/`stack`.
   const scrubbed = scrubber.scrub(normalized).data as Record<string, unknown>
   if (cause !== undefined) scrubbed.cause = await scrubForLog(cause)
   return scrubbed
 }
 
 /**
- * Scrub a value for debug logging and return the plain, scrubbed data.
- *
- * Handles `Error` (normalized so diagnostics survive and nested
- * `Request`/`Response` are summarized), `Headers` (converted first),
- * primitives (passed through), and plain objects. Fail-closed: any failure
- * returns the string `'[unscrubbable]'` rather than risking the raw value, so
- * a throwing scrubber can never leak input or mask a real error.
+ * Scrub a value for debug logging. Handles `Error`, `Headers`, plain objects,
+ * and primitives (passed through). Fail-closed: any failure returns
+ * `'[unscrubbable]'` rather than risking the raw value.
  */
 export async function scrubForLog(value: unknown): Promise<unknown> {
   try {
@@ -171,10 +144,7 @@ export async function scrubForLog(value: unknown): Promise<unknown> {
   }
 }
 
-/**
- * A `debug` logger: callable with a format string plus args, and carrying an
- * `enabled` flag reflecting whether its namespace is active.
- */
+/** A `debug` logger: a format call plus an `enabled` flag for its namespace. */
 interface DebugLike {
   (formatter: string, ...args: unknown[]): void
   enabled: boolean
@@ -182,9 +152,8 @@ interface DebugLike {
 
 /**
  * Scrub each `value` and emit it through `logger` under `formatter`. No-ops
- * when the namespace is disabled, so js-blanket is never imported while
- * `DEBUG` is off. Use this instead of passing raw objects to a `debug` logger
- * with `%O`/`%o` (enforced by lint).
+ * when the namespace is disabled. Use this instead of passing raw objects to a
+ * `debug` logger with `%O`/`%o` (enforced by lint).
  */
 export async function logScrubbed(
   logger: DebugLike,
