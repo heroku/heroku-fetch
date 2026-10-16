@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.6...heroku-fetch-v0.2.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove ~/.netrc fallback and CLI login/credential handling ([#83](https://github.com/heroku/heroku-fetch/issues/83))
+
+### Features
+
+* remove ~/.netrc fallback and CLI login/credential handling ([#83](https://github.com/heroku/heroku-fetch/issues/83)) ([05afb57](https://github.com/heroku/heroku-fetch/commit/05afb578333d2283b78fa4d15edce20a4aeab8d2))
+* scrub DEBUG log output with @heroku/js-blanket ([#82](https://github.com/heroku/heroku-fetch/issues/82)) ([36793e9](https://github.com/heroku/heroku-fetch/commit/36793e9f169d6f2824b65ac85284c9a64394a385))
+
+
+### Dependencies
+
+* bump @heroku/heroku-cli-util from 10.10.0 to 10.10.1 ([#77](https://github.com/heroku/heroku-fetch/issues/77)) ([1ff8319](https://github.com/heroku/heroku-fetch/commit/1ff83198a1e872bdd6a8925e0c66a9b93e470377))
+
 ## [0.1.6](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.5...heroku-fetch-v0.1.6) (2026-10-01)
 
 
