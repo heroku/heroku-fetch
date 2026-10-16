@@ -100,7 +100,10 @@ and pass it to the client:
 import { HerokuApiClient } from '@heroku/heroku-fetch';
 import { getAuth } from '@heroku/heroku-credential-manager';
 
-const { token } = await getAuth(undefined, 'api.heroku.com');
+// Pass the account to read the native credential store (Keychain, libsecret,
+// Windows Credential Manager). Passing `undefined` reads `~/.netrc` by host
+// only — it will not find credentials stored solely in the native store.
+const { token } = await getAuth('your-account@example.com', 'api.heroku.com');
 const client = new HerokuApiClient({
   service: 'platform',
   token,
