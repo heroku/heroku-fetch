@@ -53,7 +53,7 @@ export default class Logs extends Command {
   async run(): Promise<void> {
     const {flags} = await this.parse(Logs)
 
-    // Create API client (automatically uses getAuthToken() by default)
+    // Create API client (automatically uses the HEROKU_API_KEY env var by default)
     const client = new HerokuApiClient({
       service: 'platform',
     })

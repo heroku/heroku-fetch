@@ -2,7 +2,28 @@ import {
   afterEach, beforeEach, describe, expect, it,
 } from 'vitest'
 
-import {getDefaultDispatcher} from './node-environment-defaults.js'
+import {getDefaultDispatcher, getDefaultTokenProvider} from './node-environment-defaults.js'
+
+describe('getDefaultTokenProvider', () => {
+  const originalApiKey = process.env.HEROKU_API_KEY
+
+  afterEach(() => {
+    if (originalApiKey === undefined) delete process.env.HEROKU_API_KEY
+    else process.env.HEROKU_API_KEY = originalApiKey
+  })
+
+  it('returns the HEROKU_API_KEY env var', async () => {
+    process.env.HEROKU_API_KEY = 'env-token'
+    const provider = getDefaultTokenProvider() as () => string | undefined
+    expect(await provider()).toBe('env-token')
+  })
+
+  it('returns undefined (no throw) when HEROKU_API_KEY is not set', async () => {
+    delete process.env.HEROKU_API_KEY
+    const provider = getDefaultTokenProvider() as () => string | undefined
+    expect(provider()).toBeUndefined()
+  })
+})
 
 describe('getDefaultDispatcher', () => {
   const PROXY_VARS = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy']

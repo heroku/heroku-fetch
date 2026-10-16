@@ -1,6 +1,6 @@
 # Testing heroku-fetch
 
-This document shows the successful testing of heroku-fetch with netrc authentication and oclif commands.
+This document shows the successful testing of heroku-fetch with `HEROKU_API_KEY` authentication and oclif commands.
 
 ## Build and Test
 
@@ -14,7 +14,7 @@ npm run build
 
 ## Basic Usage Example
 
-Test the basic usage pattern with netrc authentication:
+Test the basic usage pattern (set `HEROKU_API_KEY` first):
 
 ```bash
 npx tsx examples/basic-usage.ts
@@ -39,7 +39,7 @@ Found 0 dynos
 
 ## Oclif Command Examples
 
-The oclif command examples demonstrate real-world CLI command usage with automatic netrc authentication.
+The oclif command examples demonstrate real-world CLI command usage with automatic `HEROKU_API_KEY` authentication.
 
 ### Run Script
 
@@ -125,7 +125,7 @@ With JSON output:
 
 ## Key Features Demonstrated
 
-✅ **Automatic netrc authentication** - Uses `getAuthToken()` to load tokens from `~/.netrc`
+✅ **Automatic authentication** - Reads the token from the `HEROKU_API_KEY` env var
 ✅ **Works with oclif** - Full oclif command structure with proper error handling
 ✅ **Multiple output formats** - Supports both formatted and JSON output
 ✅ **Error handling** - Proper error types and messages
@@ -134,13 +134,12 @@ With JSON output:
 
 ## Authentication
 
-All examples use the built-in `getAuthToken()` utility which:
-
-1. Checks `HEROKU_API_KEY` environment variable first
-2. Falls back to `~/.netrc` file (api.heroku.com machine)
-3. Lazily loads netrc to avoid unnecessary file operations
-
-No manual netrc parsing required!
+By default the client reads the token from the `HEROKU_API_KEY` environment
+variable. heroku-fetch does not read stored CLI credentials; to authenticate
+with credentials saved by the Heroku CLI (native credential store or
+`~/.netrc`), resolve a token with
+[`@heroku/heroku-credential-manager`](https://github.com/heroku/heroku-credential-manager)
+and pass it to the client.
 
 ## Debug Mode
 

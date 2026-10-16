@@ -4,6 +4,7 @@ import {
   afterEach, beforeEach, describe, expect, it,
 } from 'vitest'
 
+import {AuthenticationError} from '../errors.js'
 import {HerokuApiClient} from './index.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
@@ -150,6 +151,57 @@ describe('HerokuApiClient', () => {
       const pending = client.stream('/never', {signal: controller.signal})
       controller.abort()
       await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+  })
+
+  describe('unauthenticated requests (no token configured)', () => {
+    // With no token and HEROKU_API_KEY unset, the default provider resolves to
+    // undefined: the request goes out with no Authorization header, and an
+    // auth-required endpoint's 401 surfaces as AuthenticationError. This is the
+    // transport's "don't throw locally, let the server decide" contract.
+    let server: Server
+    let baseUrl: string
+    let receivedAuth: string | undefined
+    const originalApiKey = process.env.HEROKU_API_KEY
+
+    beforeEach(async () => {
+      delete process.env.HEROKU_API_KEY
+      receivedAuth = undefined
+      server = createServer((request, response) => {
+        receivedAuth = request.headers.authorization
+        response.writeHead(401, {'Content-Type': 'application/json'})
+        response.end(JSON.stringify({id: 'unauthorized', message: 'Invalid credentials provided.'}))
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      if (originalApiKey === undefined) delete process.env.HEROKU_API_KEY
+      else process.env.HEROKU_API_KEY = originalApiKey
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('sends no Authorization header and surfaces a 401 as AuthenticationError', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+
+      await expect(client.get('/apps')).rejects.toBeInstanceOf(AuthenticationError)
+      expect(receivedAuth).toBeUndefined()
+    })
+
+    it('promotes the error body id onto the AuthenticationError', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+
+      await expect(client.get('/apps')).rejects.toMatchObject({
+        id: 'unauthorized',
+        name: 'AuthenticationError',
+        statusCode: 401,
+      })
     })
   })
 

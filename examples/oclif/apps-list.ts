@@ -4,7 +4,7 @@
  * Run: npx tsx examples/oclif/apps-list.ts
  *
  * This demonstrates how to use heroku-fetch in an oclif command
- * with automatic netrc token management.
+ * with automatic token management from the HEROKU_API_KEY env var.
  */
 
 import {Command, Flags, ux} from '@oclif/core'
@@ -36,7 +36,7 @@ export default class AppsList extends Command {
   async run(): Promise<void> {
     const {flags} = await this.parse(AppsList)
 
-    // Create API client (automatically uses getAuthToken() by default)
+    // Create API client (automatically uses the HEROKU_API_KEY env var by default)
     const client = new HerokuApiClient({
       service: 'platform',
     })
