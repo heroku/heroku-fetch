@@ -19,9 +19,11 @@ export type {
   HerokuApiClientOptions,
   HerokuError,
   HerokuErrorResponse,
+  HerokuHooks,
   HerokuService,
   RequestOptions,
   ServiceConfig,
   TokenProvider,
   TwoFactorOptions,
 } from './types.js'
+export type {AfterResponseHook, BeforeRequestHook} from 'ky'

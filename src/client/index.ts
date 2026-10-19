@@ -87,6 +87,9 @@ export class HerokuApiClient {
             this.shownWarnings,
             message => this.options.warn?.(message),
           ),
+          // Consumer hooks run last: they see the resolved success-path
+          // response (the error-handling built-in above throws on non-2xx).
+          ...(options.hooks?.afterResponse ?? []),
         ],
         beforeRequest: [
           createBeforeRequestHook(
@@ -98,6 +101,9 @@ export class HerokuApiClient {
             this.options.debug,
           ),
           createRequestIdBeforeHook(this.requestIds),
+          // Consumer hooks run last: they see (and may override) the fully
+          // prepared request after auth, Accept, and Request-Id are attached.
+          ...(options.hooks?.beforeRequest ?? []),
         ],
       },
       prefix: baseUrl,

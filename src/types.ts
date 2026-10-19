@@ -1,4 +1,26 @@
+import type {AfterResponseHook, BeforeRequestHook} from 'ky'
+
 export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
+
+/**
+ * Consumer-supplied ky hooks, merged with the client's built-in pipeline.
+ *
+ * Built-in hooks run first in each phase; the hooks here run after them:
+ * - `beforeRequest`: the built-ins attach auth, the `Accept` default, and the
+ *   `Request-Id` header; your hooks then see (and may override) the fully
+ *   prepared request before it goes out.
+ * - `afterResponse`: the built-ins handle 2FA, throw typed errors on non-2xx,
+ *   track `Request-Id`s, and surface warnings. Your hooks run *after* that, so
+ *   they only see the resolved success-path response — a non-2xx response has
+ *   already been thrown as a typed error and never reaches them.
+ *
+ * Resolved once at construction: the ky instance is built lazily and cached,
+ * so hooks cannot be changed per request.
+ */
+export interface HerokuHooks {
+  afterResponse?: AfterResponseHook[];
+  beforeRequest?: BeforeRequestHook[];
+}
 
 /**
  * A `fetch`-shaped function. Returned by `getDefaultFetch()` on the
@@ -54,6 +76,11 @@ export interface HerokuApiClientOptions {
   defaultAccept?: string;
   /** Additional custom headers */
   headers?: Record<string, string>;
+  /**
+   * Consumer ky hooks merged after the client's built-in hooks. See
+   * {@link HerokuHooks} for ordering and the success-path caveat.
+   */
+  hooks?: HerokuHooks;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */

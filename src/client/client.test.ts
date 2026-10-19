@@ -367,6 +367,71 @@ describe('HerokuApiClient', () => {
     })
   })
 
+  describe('consumer hooks (options.hooks)', () => {
+    // Consumer hooks are merged after the built-ins. beforeRequest hooks see the
+    // fully-prepared request; afterResponse hooks run on the resolved response.
+    let server: Server
+    let baseUrl: string
+
+    beforeEach(async () => {
+      server = createServer((_request, response) => {
+        response.writeHead(200, {'Content-Type': 'application/json'})
+        response.end(JSON.stringify({original: true}))
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('runs a consumer beforeRequest hook after the built-ins', async () => {
+      let seenAuth: null | string = null
+      let seenRequestId: null | string = null
+      const client = new HerokuApiClient({
+        baseUrl,
+        hooks: {
+          beforeRequest: [({request}) => {
+            // The built-in hooks have already attached auth and the Request-Id.
+            seenAuth = request.headers.get('Authorization')
+            seenRequestId = request.headers.get('Request-Id')
+          }],
+        },
+        service: 'custom',
+        token: 'test',
+      })
+
+      await client.get('/a')
+
+      expect(seenAuth).toBe('Bearer test')
+      expect(seenRequestId).toBeTruthy()
+    })
+
+    it('runs a consumer afterResponse hook and lets it replace the response', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        hooks: {
+          afterResponse: [() => new Response(JSON.stringify({replaced: true}), {
+            headers: {'Content-Type': 'application/json'},
+            status: 200,
+          })],
+        },
+        service: 'custom',
+        token: 'test',
+      })
+
+      const response = await client.get('/a')
+
+      expect(await response.json()).toEqual({replaced: true})
+    })
+  })
+
   describe('defaultAccept option', () => {
     // Capture the Accept header the client actually puts on the wire, so
     // these exercise the constructor wiring rather than the hook in isolation.
