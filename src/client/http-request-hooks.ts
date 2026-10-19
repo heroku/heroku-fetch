@@ -78,9 +78,8 @@ export function createRequestIdBeforeHook(store: RequestIdStore): BeforeRequestH
  * Create an afterResponse hook that feeds the server's echoed `Request-Id`s
  * back into the accumulating store so later requests carry the full chain.
  *
- * Runs only on the success path (it is registered after the error-handling
- * hook, which throws on a non-ok response and stops the chain), matching the
- * CLI, where tracking happened after the response was accepted.
+ * Runs only on the success path: it is registered after the error-handling
+ * hook, which throws on a non-ok response and stops the chain.
  */
 export function createRequestIdAfterHook(store: RequestIdStore): AfterResponseHook {
   return ({response}) => {
@@ -99,9 +98,8 @@ export function createRequestIdAfterHook(store: RequestIdStore): AfterResponseHo
  * normalized (a leading `warning:` prefix stripped, then trimmed) and emitted
  * at most once per unique normalized string over the client's lifetime.
  *
- * Note: unlike the CLI's http-call (which could hand back an array for a
- * repeated header), the Fetch `Headers` API already collapses repeated values
- * into one comma-joined string, so this reads a single string per header.
+ * Note: the Fetch `Headers` API collapses repeated values of a header into one
+ * comma-joined string, so this reads a single string per header.
  */
 export function createWarningAfterHook(
   shownWarnings: Set<string>,

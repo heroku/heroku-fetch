@@ -137,8 +137,8 @@ export interface HerokuApiClientOptions {
    * Callback for surfacing user-facing warnings the client raises — currently
    * server `x-heroku-warning` / `warning-message` response headers. Called once
    * per unique (normalized) warning over the client's lifetime. Keeps the
-   * client environment-agnostic: the CLI passes oclif's `warn`, other hosts can
-   * log or display however they like. Omitted → warnings are dropped.
+   * client environment-agnostic: a host can log or display warnings however it
+   * likes. Omitted → warnings are dropped.
    */
   warn?: (message: string) => void;
 }

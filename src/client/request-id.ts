@@ -3,9 +3,9 @@
  *
  * Each client accumulates the `Request-Id`s it has generated and the ones the
  * server echoes back, and sends the running list on every request so a chain of
- * related calls can be correlated server-side. Unlike the CLI's module-global
- * store this is per-client, so parallel clients don't cross-contaminate and the
- * accumulation resets when a client is discarded.
+ * related calls can be correlated server-side. The store is per-client, so
+ * parallel clients don't cross-contaminate and the accumulation resets when a
+ * client is discarded.
  */
 
 /** The header the Heroku API reads/echoes for request correlation. */
@@ -55,8 +55,7 @@ export class RequestIdStore {
    * The header value to send on the next request: generate+accumulate a fresh
    * id, then apply the overflow guard. On overflow the list is RESET (not
    * truncated) and a single fresh id is sent. Always returns the comma-joined
-   * string (the CLI's overflow branch accidentally assigned an array; here it
-   * is deliberately always a string).
+   * string.
    */
   nextHeaderValue(): string {
     this.create()
