@@ -16,7 +16,14 @@ import type {
 } from '../types.js'
 
 import {debugAuth, debugRequest} from '../debug-loggers.js'
-import {createAfterResponseHook, createBeforeRequestHook} from './http-request-hooks.js'
+import {
+  createAfterResponseHook,
+  createBeforeRequestHook,
+  createRequestIdAfterHook,
+  createRequestIdBeforeHook,
+  createWarningAfterHook,
+} from './http-request-hooks.js'
+import {RequestIdStore} from './request-id.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
 export class HerokuApiClient {
@@ -24,6 +31,11 @@ export class HerokuApiClient {
   private kyOptions: KyOptions
   private options: Partial<HerokuApiClientOptions>
     & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
+  // Per-client cross-cutting request state: the Request-Id accumulation and the
+  // set of warnings already surfaced, so dedupe spans a multi-request session
+  // but resets per client and parallel clients stay isolated.
+  private readonly requestIds = new RequestIdStore()
+  private readonly shownWarnings = new Set<string>()
   private tokenProvider?: TokenProvider
   private twoFactorAttempted = {value: false}
 
@@ -62,10 +74,18 @@ export class HerokuApiClient {
     // env-var proxy support).
     this.kyOptions = {
       hooks: {
+        // Order matters: the error hook throws on a non-ok response, so the
+        // Request-Id tracking and warning hooks after it run only on success —
+        // matching the CLI, which tracked/warned after accepting the response.
         afterResponse: [
           createAfterResponseHook(
             this.options.twoFactor,
             this.twoFactorAttempted,
+          ),
+          createRequestIdAfterHook(this.requestIds),
+          createWarningAfterHook(
+            this.shownWarnings,
+            message => this.options.warn?.(message),
           ),
         ],
         beforeRequest: [
@@ -77,6 +97,7 @@ export class HerokuApiClient {
             options.headers,
             this.options.debug,
           ),
+          createRequestIdBeforeHook(this.requestIds),
         ],
       },
       prefix: baseUrl,

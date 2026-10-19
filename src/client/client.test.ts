@@ -262,6 +262,111 @@ describe('HerokuApiClient', () => {
     })
   })
 
+  describe('Request-Id correlation (end-to-end)', () => {
+    // The client accumulates a Request-Id chain and sends it on every request so
+    // related calls can be correlated server-side. Capture what the server
+    // actually receives and echo it back so we can observe accumulation.
+    let server: Server
+    let baseUrl: string
+    let received: string[]
+
+    beforeEach(async () => {
+      received = []
+      server = createServer((request, response) => {
+        const id = request.headers['request-id'] as string | undefined
+        received.push(id ?? '')
+        response.writeHead(200, {'Content-Type': 'application/json', 'Request-Id': id ?? ''})
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('sends a Request-Id and accumulates the chain across requests', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom', token: 'test'})
+
+      await client.get('/a')
+      await client.get('/b')
+
+      expect(received).toHaveLength(2)
+      const [first, second] = received
+      // The first request carries a single UUID.
+      expect(first).toMatch(/^[0-9a-f-]{36}$/i)
+      // The second carries a fresh id prepended to the (deduped) prior chain.
+      expect(second.split(',')).toHaveLength(2)
+      expect(second.endsWith(first)).toBe(true)
+    })
+
+    it('isolates the chain between separate clients', async () => {
+      await new HerokuApiClient({baseUrl, service: 'custom', token: 'test'}).get('/a')
+      await new HerokuApiClient({baseUrl, service: 'custom', token: 'test'}).get('/a')
+
+      // A second, independent client starts its own chain of length one.
+      expect(received[1].split(',')).toHaveLength(1)
+    })
+  })
+
+  describe('warning header surfacing (end-to-end)', () => {
+    // Server warning headers are forwarded to the injected `warn` callback,
+    // deduped per client over its lifetime.
+    let server: Server
+    let baseUrl: string
+    let warningHeaders: Record<string, string>
+
+    beforeEach(async () => {
+      warningHeaders = {}
+      server = createServer((request, response) => {
+        response.writeHead(200, {'Content-Type': 'application/json', ...warningHeaders})
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('forwards x-heroku-warning to the warn callback, deduped', async () => {
+      warningHeaders = {'x-heroku-warning': 'Warning: your plan is changing.'}
+      const warnings: string[] = []
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        warn: message => warnings.push(message),
+      })
+
+      await client.get('/a')
+      await client.get('/b')
+
+      // Prefix stripped, trimmed, and surfaced once despite two responses.
+      expect(warnings).toEqual(['your plan is changing.'])
+    })
+
+    it('drops warnings when no warn callback is configured', async () => {
+      warningHeaders = {'x-heroku-warning': 'nobody is listening'}
+      const client = new HerokuApiClient({baseUrl, service: 'custom', token: 'test'})
+
+      // Must not throw despite the warning header being present.
+      await expect(client.get('/a')).resolves.toBeDefined()
+    })
+  })
+
   describe('defaultAccept option', () => {
     // Capture the Accept header the client actually puts on the wire, so
     // these exercise the constructor wiring rather than the hook in isolation.

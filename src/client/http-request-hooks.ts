@@ -12,6 +12,7 @@ import type {TwoFactorOptions} from '../types.js'
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
 import {logScrubbed} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
+import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
 
 /**
@@ -58,6 +59,60 @@ export function createBeforeRequestHook(
     if (debug) {
       await logScrubbed(debugRequest, 'Headers: %O', request.headers)
     }
+  }
+}
+
+/**
+ * Create a beforeRequest hook that sets the accumulating `Request-Id`
+ * correlation header (with the 7KB overflow guard).
+ */
+export function createRequestIdBeforeHook(store: RequestIdStore): BeforeRequestHook {
+  return ({request}) => {
+    request.headers.set(REQUEST_ID_HEADER, store.nextHeaderValue())
+  }
+}
+
+/**
+ * Create an afterResponse hook that feeds the server's echoed `Request-Id`s
+ * back into the accumulating store so later requests carry the full chain.
+ *
+ * Runs only on the success path (it is registered after the error-handling
+ * hook, which throws on a non-ok response and stops the chain), matching the
+ * CLI, where tracking happened after the response was accepted.
+ */
+export function createRequestIdAfterHook(store: RequestIdStore): AfterResponseHook {
+  return ({response}) => {
+    const header = response.headers.get(REQUEST_ID_HEADER)
+    if (header) {
+      store.track(...header.split(','))
+    }
+  }
+}
+
+/**
+ * Create an afterResponse hook that surfaces server warning headers to the
+ * user via the injected `warn` callback, deduped per client.
+ *
+ * Reads `x-heroku-warning` first, then `warning-message`. Each value is
+ * normalized (a leading `warning:` prefix stripped, then trimmed) and emitted
+ * at most once per unique normalized string over the client's lifetime.
+ *
+ * Note: unlike the CLI's http-call (which could hand back an array for a
+ * repeated header), the Fetch `Headers` API already collapses repeated values
+ * into one comma-joined string, so this reads a single string per header.
+ */
+export function createWarningAfterHook(
+  shownWarnings: Set<string>,
+  warn: (message: string) => void,
+): AfterResponseHook {
+  return ({response}) => {
+    const raw = response.headers.get('x-heroku-warning') ?? response.headers.get('warning-message')
+    if (!raw) return
+
+    const normalized = raw.replace(/^\s*warning:?\s*/i, '').trim()
+    if (!normalized || shownWarnings.has(normalized)) return
+    shownWarnings.add(normalized)
+    warn(normalized)
   }
 }
 

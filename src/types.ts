@@ -64,6 +64,14 @@ export interface HerokuApiClientOptions {
   token?: TokenProvider;
   /** Two-factor authentication configuration */
   twoFactor?: TwoFactorOptions;
+  /**
+   * Callback for surfacing user-facing warnings the client raises — currently
+   * server `x-heroku-warning` / `warning-message` response headers. Called once
+   * per unique (normalized) warning over the client's lifetime. Keeps the
+   * client environment-agnostic: the CLI passes oclif's `warn`, other hosts can
+   * log or display however they like. Omitted → warnings are dropped.
+   */
+  warn?: (message: string) => void;
 }
 
 export interface RequestOptions {

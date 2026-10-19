@@ -5,7 +5,29 @@ import {
 } from 'vitest'
 
 import * as debugLoggers from '../debug-loggers.js'
-import {createBeforeRequestHook} from './http-request-hooks.js'
+import {
+  createBeforeRequestHook,
+  createRequestIdAfterHook,
+  createRequestIdBeforeHook,
+  createWarningAfterHook,
+} from './http-request-hooks.js'
+import {REQUEST_ID_HEADER, RequestIdStore} from './request-id.js'
+
+/** Feed a response (optionally carrying a Request-Id) through the after hook. */
+function trackResponse(store: RequestIdStore, responseRequestId?: string): void {
+  const headers = new Headers()
+  if (responseRequestId !== undefined) headers.set(REQUEST_ID_HEADER, responseRequestId)
+  const response = new Response(null, {headers})
+  const hook = createRequestIdAfterHook(store)
+  hook({options: {} as NormalizedOptions, request: new Request('https://api.heroku.com/apps'), response})
+}
+
+/** Feed a response carrying the given headers through the warning after hook. */
+function emitWarning(headers: Record<string, string>, warn: (message: string) => void, shown = new Set<string>()): void {
+  const response = new Response(null, {headers})
+  const hook = createWarningAfterHook(shown, warn)
+  hook({options: {} as NormalizedOptions, request: new Request('https://api.heroku.com/apps'), response})
+}
 
 describe('createBeforeRequestHook', () => {
   let debugRequestSpy: ReturnType<typeof vi.spyOn>
@@ -122,5 +144,85 @@ describe('createBeforeRequestHook', () => {
 
       expect(request.headers.has('Accept')).toBe(false)
     })
+  })
+})
+
+describe('createRequestIdBeforeHook', () => {
+  it('sets the Request-Id header to the store\'s next accumulated value', async () => {
+    let n = 0
+    const store = new RequestIdStore(() => `id-${n++}`)
+    const hook = createRequestIdBeforeHook(store)
+    const request = new Request('https://api.heroku.com/apps')
+
+    await hook({options: {} as NormalizedOptions, request})
+    expect(request.headers.get(REQUEST_ID_HEADER)).toBe('id-0')
+
+    // A second request carries the accumulated chain.
+    const next = new Request('https://api.heroku.com/apps')
+    await hook({options: {} as NormalizedOptions, request: next})
+    expect(next.headers.get(REQUEST_ID_HEADER)).toBe('id-1,id-0')
+  })
+})
+
+describe('createRequestIdAfterHook', () => {
+  it('tracks the server-echoed Request-Ids into the store', () => {
+    let n = 0
+    const store = new RequestIdStore(() => `local-${n++}`)
+    store.create() // local-0
+
+    trackResponse(store, 'server-a,server-b')
+
+    // Novel server ids are prepended ahead of the locally-generated one.
+    expect(store.headerValue).toBe('server-a,server-b,local-0')
+  })
+
+  it('is a no-op when the response carries no Request-Id', () => {
+    const store = new RequestIdStore(() => 'local-0')
+    store.create()
+
+    trackResponse(store)
+
+    expect(store.headerValue).toBe('local-0')
+  })
+})
+
+describe('createWarningAfterHook', () => {
+  it('surfaces an x-heroku-warning to the warn callback', () => {
+    const warn = vi.fn()
+    emitWarning({'x-heroku-warning': 'Your app is deprecated.'}, warn)
+    expect(warn).toHaveBeenCalledWith('Your app is deprecated.')
+  })
+
+  it('falls back to warning-message when x-heroku-warning is absent', () => {
+    const warn = vi.fn()
+    emitWarning({'warning-message': 'A fallback warning.'}, warn)
+    expect(warn).toHaveBeenCalledWith('A fallback warning.')
+  })
+
+  it('prefers x-heroku-warning over warning-message when both are present', () => {
+    const warn = vi.fn()
+    emitWarning({'warning-message': 'ignored', 'x-heroku-warning': 'preferred'}, warn)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('preferred')
+  })
+
+  it('strips a leading "warning:" prefix (case-insensitive) and trims', () => {
+    const warn = vi.fn()
+    emitWarning({'x-heroku-warning': '  Warning: heads up  '}, warn)
+    expect(warn).toHaveBeenCalledWith('heads up')
+  })
+
+  it('dedupes repeated warnings across responses sharing a store', () => {
+    const warn = vi.fn()
+    const shown = new Set<string>()
+    emitWarning({'x-heroku-warning': 'same warning'}, warn, shown)
+    emitWarning({'x-heroku-warning': 'warning: same warning'}, warn, shown) // normalizes equal
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing when no warning header is present', () => {
+    const warn = vi.fn()
+    emitWarning({}, warn)
+    expect(warn).not.toHaveBeenCalled()
   })
 })
