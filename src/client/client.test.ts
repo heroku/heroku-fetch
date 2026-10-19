@@ -205,6 +205,63 @@ describe('HerokuApiClient', () => {
     })
   })
 
+  describe('proxy routing (end-to-end through ky)', () => {
+    // Regression: ky calls the global fetch, which on Node 22 is backed by a
+    // different undici than our dispatcher and rejects it. The client must
+    // drive ky through getDefaultFetch()'s matched fetch so a proxied request
+    // actually succeeds. A plain-HTTP forward proxy receives the absolute URL.
+    const PROXY_VARS = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy']
+    const saved: Record<string, string | undefined> = {}
+    let proxy: Server
+    let proxyUrl: string
+    let proxiedUrl: string | undefined
+
+    beforeEach(async () => {
+      for (const name of PROXY_VARS) {
+        saved[name] = process.env[name]
+        delete process.env[name]
+      }
+
+      proxiedUrl = undefined
+      proxy = createServer((request, response) => {
+        proxiedUrl = request.url
+        response.writeHead(200, {'content-type': 'application/json'})
+        response.end(JSON.stringify({routed: true}))
+      })
+      await new Promise<void>(resolve => {
+        proxy.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = proxy.address() as AddressInfo
+      proxyUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      for (const name of PROXY_VARS) {
+        if (saved[name] === undefined) delete process.env[name]
+        else process.env[name] = saved[name]
+      }
+
+      await new Promise<void>(resolve => {
+        proxy.close(() => resolve())
+      })
+    })
+
+    it('routes a GET through an HTTP_PROXY-configured dispatcher', async () => {
+      process.env.HTTP_PROXY = proxyUrl
+      const client = new HerokuApiClient({
+        baseUrl: 'http://api.heroku.example',
+        service: 'custom',
+        token: 'test',
+      })
+
+      const response = await client.get('/account')
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({routed: true})
+      expect(proxiedUrl).toBe('http://api.heroku.example/account')
+    })
+  })
+
   describe('defaultAccept option', () => {
     // Capture the Accept header the client actually puts on the wire, so
     // these exercise the constructor wiring rather than the hook in isolation.

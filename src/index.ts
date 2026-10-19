@@ -15,6 +15,7 @@ export {
   getApiUrl,
 } from './host.js'
 export type {
+  FetchLike,
   HerokuApiClientOptions,
   HerokuError,
   HerokuErrorResponse,

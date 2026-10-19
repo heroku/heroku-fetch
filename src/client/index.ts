@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultDispatcher, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -58,8 +58,8 @@ export class HerokuApiClient {
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
     // Stash the ky options; the actual ky instance is built lazily so
-    // we can await getDefaultDispatcher() (Node loads undici
-    // dynamically for env-var proxy support).
+    // we can await getDefaultFetch() (Node loads undici dynamically for
+    // env-var proxy support).
     this.kyOptions = {
       hooks: {
         afterResponse: [
@@ -158,19 +158,20 @@ export class HerokuApiClient {
   }
 
   /**
-   * Lazily construct ky with an env-aware undici dispatcher (Node)
-   * or no dispatcher (browser). Cached after the first call.
+   * Lazily construct ky over a fetch that is proxy-aware on Node (undici's own
+   * fetch paired with an env-var dispatcher) and the global fetch in the
+   * browser. Cached after the first call.
+   *
+   * We drive ky through `fetch` rather than ky's `dispatcher` option because
+   * ky calls the global `fetch`, which on Node 22 is backed by a different
+   * undici than our dispatcher and rejects it (`invalid onRequestStart
+   * method`). `getDefaultFetch()` returns a fetch from the matching undici.
    */
   private async getClient(): Promise<KyInstance> {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
-        const dispatcher = await getDefaultDispatcher()
-        // ky's type definitions don't include `dispatcher`; it's
-        // passed through to fetch as undici expects it.
-        const opts: KyOptions = dispatcher
-          ? ({...this.kyOptions, dispatcher} as never)
-          : this.kyOptions
-        return ky.create(opts)
+        const fetch = await getDefaultFetch()
+        return ky.create({...this.kyOptions, fetch: fetch as typeof globalThis.fetch})
       })()
     }
 

@@ -1,6 +1,15 @@
 export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
 
 /**
+ * A `fetch`-shaped function. Returned by `getDefaultFetch()` on the
+ * `@heroku/heroku-fetch/client/environment-defaults.js` subpath: a drop-in
+ * `fetch` that, on Node, is already paired with the proxy dispatcher from the
+ * same undici copy, so proxy routing works. Pass it anywhere a `fetch` is
+ * accepted. See `getDefaultFetch` for why the pairing matters.
+ */
+export type FetchLike = (input: Request | string | URL, init?: Parameters<typeof fetch>[1]) => Promise<Response>
+
+/**
  * A bearer token, or a function resolving one at request time. A provider may
  * return `undefined` (sync or async) to send the request with no `Authorization`
  * header — appropriate for endpoints or hosts that need no Heroku auth. Requests
