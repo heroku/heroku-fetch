@@ -14,11 +14,13 @@ import type {
   RequestOptions,
   TokenProvider,
 } from '../types.js'
+import type {DelinquencyInfo} from './delinquency.js'
 
 import {debugAuth, debugRequest} from '../debug-loggers.js'
 import {
   createAfterResponseHook,
   createBeforeRequestHook,
+  createDelinquencyAfterHook,
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
@@ -29,12 +31,14 @@ import {SERVICE_CONFIGS} from './service-configurations.js'
 
 export class HerokuApiClient {
   private clientPromise: null | Promise<KyInstance> = null
-  private kyOptions: KyOptions
-  private options: Partial<HerokuApiClientOptions>
-    & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
   // Per-client cross-cutting request state: the Request-Id accumulation and the
   // set of warnings already surfaced, so dedupe spans a multi-request session
   // but resets per client and parallel clients stay isolated.
+  private readonly delinquencyShown = {value: false}
+  private kyOptions: KyOptions
+  private options: Partial<HerokuApiClientOptions>
+    & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
+  private particleboardClient?: HerokuApiClient
   private readonly requestIds = new RequestIdStore()
   private readonly shownWarnings = new Set<string>()
   private tokenProvider?: TokenProvider
@@ -76,8 +80,8 @@ export class HerokuApiClient {
     this.kyOptions = {
       hooks: {
         // Order matters: the error hook throws on a non-ok response, so the
-        // Request-Id tracking and warning hooks after it run only on success —
-        // matching the CLI, which tracked/warned after accepting the response.
+        // Request-Id tracking, warning, metadata, and delinquency hooks after
+        // it run only on the success path.
         afterResponse: [
           createAfterResponseHook(
             this.options.twoFactor,
@@ -89,6 +93,14 @@ export class HerokuApiClient {
             message => this.options.warn?.(message),
           ),
           createMetadataAfterHook(metadata => this.options.onResponseMetadata?.(metadata)),
+          ...(this.options.delinquencyWarnings
+            ? [createDelinquencyAfterHook({
+              apiHostname: new URL(baseUrl).hostname,
+              fetchDelinquency: fetchUrl => this.fetchDelinquency(fetchUrl),
+              shownRef: this.delinquencyShown,
+              warn: message => this.options.warn?.(message),
+            })]
+            : []),
           // Consumer hooks run last: they see the resolved success-path
           // response (the error-handling built-in above throws on non-2xx).
           ...(options.hooks?.afterResponse ?? []),
@@ -187,6 +199,23 @@ export class HerokuApiClient {
   }
 
   /**
+   * Fetch an account/team's delinquency status from Particleboard. Routes
+   * through an internal client bound to the `particleboard` service, so it
+   * reuses the service's base URL and Accept default, this client's token, and
+   * the proxy-aware fetch. Returns `undefined` on any failure (non-2xx, network,
+   * parse) — the caller treats delinquency as a best-effort notice and never
+   * lets it affect the originating request.
+   */
+  private async fetchDelinquency(fetchUrl: string): Promise<DelinquencyInfo | undefined> {
+    try {
+      const response = await this.getParticleboardClient().get(fetchUrl)
+      return await response.json() as DelinquencyInfo
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
    * Lazily construct ky over a fetch that is proxy-aware on Node (undici's own
    * fetch paired with an env-var dispatcher) and the global fetch in the
    * browser. Cached after the first call.
@@ -205,6 +234,23 @@ export class HerokuApiClient {
     }
 
     return this.clientPromise
+  }
+
+  /**
+   * Lazily build the internal Particleboard client used for the delinquency
+   * side-call. Bound to the `particleboard` service (base URL + Accept default
+   * from the service config, overridable via `particleboardBaseUrl`) and this
+   * client's token. Deliberately omits `warn` / `onResponseMetadata` /
+   * `delinquencyWarnings` so Particleboard's own responses don't surface
+   * warnings or recurse.
+   */
+  private getParticleboardClient(): HerokuApiClient {
+    this.particleboardClient ??= new HerokuApiClient({
+      baseUrl: this.options.particleboardBaseUrl,
+      service: 'particleboard',
+      token: this.tokenProvider,
+    })
+    return this.particleboardClient
   }
 
   /**

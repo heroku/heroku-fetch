@@ -8,9 +8,11 @@
 import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 
 import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
+import type {DelinquencyInfo} from './delinquency.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
 import {logScrubbed} from '../redact.js'
+import {evaluateDelinquency, matchDelinquencyResource} from './delinquency.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
@@ -128,6 +130,39 @@ export function createMetadataAfterHook(onMetadata: (metadata: ResponseMetadata)
       url: request.url,
       warnings: normalized ? [normalized] : [],
     })
+  }
+}
+
+/**
+ * Create an afterResponse hook that, for a qualifying GET (`/account` or
+ * `/teams/<id>` on the API host), fetches the account/team's delinquency
+ * status from Particleboard and surfaces any scheduled suspension/deletion via
+ * `warn`. At most one warning per client (the `shownRef` guard also suppresses
+ * the side-call thereafter).
+ *
+ * The Particleboard call runs sequentially, after the main response resolves.
+ * The guard means it happens at most once per client, so the one-time extra
+ * latency falls on a single `/account`/`/teams` GET. Particleboard errors are
+ * swallowed — delinquency is best-effort.
+ */
+export function createDelinquencyAfterHook(deps: {
+  apiHostname: string;
+  fetchDelinquency: (fetchUrl: string) => Promise<DelinquencyInfo | undefined>;
+  shownRef: {value: boolean};
+  warn: (message: string) => void;
+}): AfterResponseHook {
+  return async ({request}) => {
+    if (deps.shownRef.value) return
+
+    const match = matchDelinquencyResource(request.method, request.url, deps.apiHostname)
+    if (!match) return
+
+    const info = await deps.fetchDelinquency(match.fetchUrl)
+    if (!info) return
+
+    const {message, warningShown} = evaluateDelinquency(match.resourceType, info, Date.now())
+    if (warningShown) deps.shownRef.value = true
+    if (message) deps.warn(message)
   }
 }
 
