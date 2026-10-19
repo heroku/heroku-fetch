@@ -95,15 +95,6 @@ export interface HerokuApiClientOptions {
    * dispatch at that variant without changing the shared service default.
    */
   defaultAccept?: string;
-  /**
-   * Opt in to account/team delinquency warnings (off by default). When enabled,
-   * a GET to `/account` or `/teams/<id>` on the API host triggers a one-time
-   * side-call to Particleboard; a scheduled suspension or deletion is surfaced
-   * via `warn`. At most one such warning per client, and the side-call stops
-   * once it has fired. Needs a `warn` callback to reach the user; the client's
-   * token is reused for the Particleboard request.
-   */
-  delinquencyWarnings?: boolean;
   /** Additional custom headers */
   headers?: Record<string, string>;
   /**
@@ -118,11 +109,6 @@ export interface HerokuApiClientOptions {
    * non-2xx is thrown as a typed error and never reaches it). Omitted → no-op.
    */
   onResponseMetadata?: (metadata: ResponseMetadata) => void;
-  /**
-   * Particleboard base URL for the delinquency side-call. Defaults to the
-   * particleboard service URL. Only consulted when `delinquencyWarnings` is on.
-   */
-  particleboardBaseUrl?: string;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */
