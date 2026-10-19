@@ -4,6 +4,8 @@ import {
   afterEach, beforeEach, describe, expect, it,
 } from 'vitest'
 
+import type {ResponseMetadata} from '../types.js'
+
 import {AuthenticationError} from '../errors.js'
 import {HerokuApiClient} from './index.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
@@ -364,6 +366,55 @@ describe('HerokuApiClient', () => {
 
       // Must not throw despite the warning header being present.
       await expect(client.get('/a')).resolves.toBeDefined()
+    })
+  })
+
+  describe('onResponseMetadata (end-to-end)', () => {
+    // The success-path metadata side channel: request-id + warnings surfaced
+    // structurally, while get() still returns the bare Response.
+    let server: Server
+    let baseUrl: string
+
+    beforeEach(async () => {
+      server = createServer((request, response) => {
+        response.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Request-Id': (request.headers['request-id'] as string | undefined) ?? '',
+          'x-heroku-warning': 'Warning: plan changing.',
+        })
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('surfaces structured metadata on the success path', async () => {
+      const seen: ResponseMetadata[] = []
+      const client = new HerokuApiClient({
+        baseUrl,
+        onResponseMetadata: metadata => seen.push(metadata),
+        service: 'custom',
+        token: 'test',
+      })
+
+      const response = await client.get('/account')
+
+      // The bare Response is still returned unchanged.
+      expect(response.status).toBe(200)
+      expect(seen).toHaveLength(1)
+      expect(seen[0].status).toBe(200)
+      expect(seen[0].url).toBe(`${baseUrl}/account`)
+      expect(seen[0].requestId).toMatch(/^[0-9a-f-]{36}$/i)
+      expect(seen[0].warnings).toEqual(['plan changing.'])
     })
   })
 

@@ -22,6 +22,7 @@ export type {
   HerokuHooks,
   HerokuService,
   RequestOptions,
+  ResponseMetadata,
   ServiceConfig,
   TokenProvider,
   TwoFactorOptions,

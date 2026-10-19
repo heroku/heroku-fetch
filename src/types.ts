@@ -40,6 +40,27 @@ export type FetchLike = (input: Request | string | URL, init?: Parameters<typeof
  */
 export type TokenProvider = (() => Promise<string | undefined> | string | undefined) | string
 
+/**
+ * Structured, success-path metadata about a completed response, surfaced via
+ * the `onResponseMetadata` option so consumers can read request correlation and
+ * warnings without re-parsing headers. The bare `Response` is still returned
+ * from `get`/`post`/etc. unchanged — this is an additive side channel.
+ */
+export interface ResponseMetadata {
+  /** The `Request-Id` the server echoed for this response, if present. */
+  requestId?: string;
+  /** HTTP status code of the response. */
+  status: number;
+  /** Final request URL. */
+  url: string;
+  /**
+   * Warnings this response carried (normalized the same way the `warn`
+   * callback receives them). Empty when the response carried none. Not deduped
+   * against prior responses — reflects what *this* response carried.
+   */
+  warnings: string[];
+}
+
 export interface TwoFactorOptions {
   /** Callback function to prompt for 2FA code */
   onChallenge: () => Promise<string> | string;
@@ -81,6 +102,13 @@ export interface HerokuApiClientOptions {
    * {@link HerokuHooks} for ordering and the success-path caveat.
    */
   hooks?: HerokuHooks;
+  /**
+   * Callback invoked on the success path with structured {@link ResponseMetadata}
+   * for each completed response — request-id and warnings without re-parsing
+   * headers. Runs only after built-in error handling accepts the response (a
+   * non-2xx is thrown as a typed error and never reaches it). Omitted → no-op.
+   */
+  onResponseMetadata?: (metadata: ResponseMetadata) => void;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */

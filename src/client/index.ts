@@ -19,6 +19,7 @@ import {debugAuth, debugRequest} from '../debug-loggers.js'
 import {
   createAfterResponseHook,
   createBeforeRequestHook,
+  createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
   createWarningAfterHook,
@@ -87,6 +88,7 @@ export class HerokuApiClient {
             this.shownWarnings,
             message => this.options.warn?.(message),
           ),
+          createMetadataAfterHook(metadata => this.options.onResponseMetadata?.(metadata)),
           // Consumer hooks run last: they see the resolved success-path
           // response (the error-handling built-in above throws on non-2xx).
           ...(options.hooks?.afterResponse ?? []),

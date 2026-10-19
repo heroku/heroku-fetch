@@ -7,7 +7,7 @@
 
 import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 
-import type {TwoFactorOptions} from '../types.js'
+import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
 import {logScrubbed} from '../redact.js'
@@ -106,14 +106,41 @@ export function createWarningAfterHook(
   warn: (message: string) => void,
 ): AfterResponseHook {
   return ({response}) => {
-    const raw = response.headers.get('x-heroku-warning') ?? response.headers.get('warning-message')
-    if (!raw) return
-
-    const normalized = raw.replace(/^\s*warning:?\s*/i, '').trim()
+    const normalized = normalizedWarning(response)
     if (!normalized || shownWarnings.has(normalized)) return
     shownWarnings.add(normalized)
     warn(normalized)
   }
+}
+
+/**
+ * Create an afterResponse hook that surfaces structured success-path metadata
+ * (request-id, warnings) via the injected callback, so consumers get request
+ * correlation and warnings without re-parsing headers. Registered after the
+ * error-handling hook, so it only sees responses the client accepted.
+ */
+export function createMetadataAfterHook(onMetadata: (metadata: ResponseMetadata) => void): AfterResponseHook {
+  return ({request, response}) => {
+    const normalized = normalizedWarning(response)
+    onMetadata({
+      requestId: response.headers.get(REQUEST_ID_HEADER) ?? undefined,
+      status: response.status,
+      url: request.url,
+      warnings: normalized ? [normalized] : [],
+    })
+  }
+}
+
+/**
+ * The warning a response carries, normalized (leading `warning:` prefix
+ * stripped, trimmed), or `undefined` if none. Reads `x-heroku-warning` first,
+ * then `warning-message`. Shared by the warn-surfacing and metadata hooks so
+ * both apply the same normalization.
+ */
+function normalizedWarning(response: Response): string | undefined {
+  const raw = response.headers.get('x-heroku-warning') ?? response.headers.get('warning-message')
+  if (!raw) return undefined
+  return raw.replace(/^\s*warning:?\s*/i, '').trim() || undefined
 }
 
 /**

@@ -4,9 +4,12 @@ import {
   afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest'
 
+import type {ResponseMetadata} from '../types.js'
+
 import * as debugLoggers from '../debug-loggers.js'
 import {
   createBeforeRequestHook,
+  createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
   createWarningAfterHook,
@@ -27,6 +30,18 @@ function emitWarning(headers: Record<string, string>, warn: (message: string) =>
   const response = new Response(null, {headers})
   const hook = createWarningAfterHook(shown, warn)
   hook({options: {} as NormalizedOptions, request: new Request('https://api.heroku.com/apps'), response})
+}
+
+/** Feed a response through the metadata hook and return the captured metadata. */
+function collectMetadata(headers: Record<string, string>, status = 200): ResponseMetadata {
+  let captured: ResponseMetadata | undefined
+  const response = new Response(null, {headers, status})
+  const hook = createMetadataAfterHook(metadata => {
+    captured = metadata
+  })
+  hook({options: {} as NormalizedOptions, request: new Request('https://api.heroku.com/apps'), response})
+  if (!captured) throw new Error('metadata hook did not fire')
+  return captured
 }
 
 describe('createBeforeRequestHook', () => {
@@ -224,5 +239,28 @@ describe('createWarningAfterHook', () => {
     const warn = vi.fn()
     emitWarning({}, warn)
     expect(warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('createMetadataAfterHook', () => {
+  it('reports request-id, status, url, and the normalized warning', () => {
+    const metadata = collectMetadata({
+      [REQUEST_ID_HEADER]: 'abc,def',
+      'x-heroku-warning': 'warning: heads up',
+    })
+
+    expect(metadata).toEqual({
+      requestId: 'abc,def',
+      status: 200,
+      url: 'https://api.heroku.com/apps',
+      warnings: ['heads up'],
+    })
+  })
+
+  it('reports an empty warnings list and absent request-id when neither is present', () => {
+    const metadata = collectMetadata({})
+
+    expect(metadata.requestId).toBeUndefined()
+    expect(metadata.warnings).toEqual([])
   })
 })
