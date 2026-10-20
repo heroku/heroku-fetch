@@ -443,25 +443,30 @@ describe('HerokuApiClient', () => {
     // success-path hooks exactly once.
     let server: Server
     let baseUrl: string
-    let requests: {requestId: string | undefined; twoFactorCode: string | undefined}[]
+    let requests: {body: string; requestId: string | undefined; twoFactorCode: string | undefined}[]
 
     beforeEach(async () => {
       requests = []
       server = createServer((request, response) => {
         const twoFactorCode = request.headers['heroku-two-factor-code'] as string | undefined
         const requestId = request.headers['request-id'] as string | undefined
-        requests.push({requestId, twoFactorCode})
+        const chunks: Buffer[] = []
+        request.on('data', chunk => chunks.push(chunk as Buffer))
+        request.on('end', () => {
+          const body = Buffer.concat(chunks).toString()
+          requests.push({body, requestId, twoFactorCode})
 
-        // Only the expected code is accepted; anything else (including no code)
-        // is answered with a fresh 2FA challenge.
-        if (twoFactorCode !== '123456') {
-          response.writeHead(403, {'Content-Type': 'application/json'})
-          response.end(JSON.stringify({id: 'two_factor', message: 'Two-factor code required.'}))
-          return
-        }
+          // Only the expected code is accepted; anything else (including no code)
+          // is answered with a fresh 2FA challenge.
+          if (twoFactorCode !== '123456') {
+            response.writeHead(403, {'Content-Type': 'application/json'})
+            response.end(JSON.stringify({id: 'two_factor', message: 'Two-factor code required.'}))
+            return
+          }
 
-        response.writeHead(200, {'Content-Type': 'application/json', 'Request-Id': requestId ?? ''})
-        response.end(JSON.stringify({ok: true}))
+          response.writeHead(200, {'Content-Type': 'application/json', 'Request-Id': requestId ?? ''})
+          response.end(JSON.stringify({ok: true}))
+        })
       })
       await new Promise<void>(resolve => {
         server.listen(0, '127.0.0.1', resolve)
@@ -503,6 +508,28 @@ describe('HerokuApiClient', () => {
       // ky.retry), so error/metadata only run on the retried response.
       expect(seen).toHaveLength(1)
       expect(seen[0].status).toBe(200)
+    })
+
+    it('retries a POST with its JSON body intact', async () => {
+      // A forced retry of a non-idempotent method must re-send the original
+      // body: ky hands the hook a retry clone whose body is still unread, so
+      // the POST payload survives the challenge → retry round-trip.
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        twoFactor: {onChallenge: () => '123456'},
+      })
+
+      const response = await client.post('/account', {name: 'example'})
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ok: true})
+      expect(requests).toHaveLength(2)
+      expect(requests[1].twoFactorCode).toBe('123456')
+      // The retry carried the same JSON body as the original challenge attempt.
+      expect(JSON.parse(requests[0].body)).toEqual({name: 'example'})
+      expect(JSON.parse(requests[1].body)).toEqual({name: 'example'})
     })
 
     it('does not loop when the server rejects the submitted code', async () => {

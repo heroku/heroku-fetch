@@ -40,6 +40,12 @@ export async function is2FAError(response: Response): Promise<boolean> {
  * warnings, metadata, and consumer hooks) exactly once. The forced retry counts
  * against `retry.limit` and is observable in `beforeRetry` as a
  * `ForceRetryError`.
+ *
+ * Because it draws on the same retry budget as ky's transport retries, a
+ * request that already exhausted `retry.limit` on network/timeout retries would
+ * surface the raw `ForceRetryError` rather than re-issuing. In practice a 2FA
+ * challenge arrives on the first attempt (before any transport retry), so the
+ * budget is intact; this edge only matters if that assumption ever breaks.
  */
 export async function handle2FAChallenge(
   request: Request,

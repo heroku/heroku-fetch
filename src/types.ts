@@ -73,7 +73,7 @@ export interface ResponseMetadata {
    * individual ids (matching the client's internal correlation tracking).
    * Empty when the response carried no `Request-Id`.
    */
-  requestIds: string[];
+  requestIds: readonly string[];
   /** HTTP status code of the response. */
   status: number;
   /** Final request URL. */
@@ -83,7 +83,7 @@ export interface ResponseMetadata {
    * callback receives them). Empty when the response carried none. Not deduped
    * against prior responses — reflects what *this* response carried.
    */
-  warnings: string[];
+  warnings: readonly string[];
 }
 
 export interface TwoFactorOptions {

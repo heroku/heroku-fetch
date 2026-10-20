@@ -79,7 +79,11 @@ export class HerokuApiClient {
     // and no override contribute no Accept at all.
     const defaultAccept = options.defaultAccept ?? serviceConfig.defaultAccept
     const headers: Record<string, string> = {...options.headers}
-    if (defaultAccept && !('accept' in headers) && !('Accept' in headers)) {
+    // Case-insensitive check: a consumer may have supplied Accept under any
+    // casing, and ky merges headers case-insensitively (last write wins), so a
+    // plain `'Accept' in headers` test would miss a lowercase `accept` and let
+    // our default clobber the consumer's choice.
+    if (defaultAccept && !new Headers(options.headers).has('accept')) {
       headers.Accept = defaultAccept
     }
 
@@ -189,13 +193,13 @@ export class HerokuApiClient {
     debugRequest('STREAM %s', path)
 
     const kyOptions: KyOptions = {
-      // Only set headers when the caller supplied some: a literal
-      // `headers: undefined` would clear the instance headers (the Accept
-      // default and custom headers) ky merges in, not leave them untouched.
+      // Only set these when the caller supplied them: a literal `undefined`
+      // overrides (and for headers, clears) what ky merges from the instance,
+      // rather than leaving the instance value untouched.
       ...(options?.headers && {headers: options.headers}),
+      ...(options?.searchParams && {searchParams: options.searchParams}),
+      ...(options?.signal && {signal: options.signal}),
       method: 'GET',
-      searchParams: options?.searchParams,
-      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 
@@ -247,13 +251,13 @@ export class HerokuApiClient {
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
     const kyOptions: KyOptions = {
-      // Only set headers when the caller supplied some: a literal
-      // `headers: undefined` would clear the instance headers (the Accept
-      // default and custom headers) ky merges in, not leave them untouched.
+      // Only set these when the caller supplied them: a literal `undefined`
+      // overrides (and for headers, clears) what ky merges from the instance,
+      // rather than leaving the instance value untouched.
       ...(options?.headers && {headers: options.headers}),
+      ...(options?.searchParams && {searchParams: options.searchParams}),
+      ...(options?.signal && {signal: options.signal}),
       method: options?.method || 'GET',
-      searchParams: options?.searchParams,
-      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 

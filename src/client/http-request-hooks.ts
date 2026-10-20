@@ -81,9 +81,18 @@ export function createRequestIdAfterHook(store: RequestIdStore): AfterResponseHo
   return ({response}) => {
     const header = response.headers.get(REQUEST_ID_HEADER)
     if (header) {
-      store.track(...header.split(','))
+      store.track(...splitRequestIds(header))
     }
   }
+}
+
+/**
+ * Split a `Request-Id` header into its individual ids, trimming surrounding
+ * whitespace and dropping empty segments, so a server that joins with `", "`
+ * (or leaves a trailing comma) doesn't produce padded or empty ids.
+ */
+function splitRequestIds(header: string): string[] {
+  return header.split(',').map(id => id.trim()).filter(Boolean)
 }
 
 /**
@@ -128,7 +137,7 @@ export function createMetadataAfterHook(onMetadata: (metadata: ResponseMetadata)
     const normalized = normalizedWarning(response)
     const requestIdHeader = response.headers.get(REQUEST_ID_HEADER)
     onMetadata({
-      requestIds: requestIdHeader ? requestIdHeader.split(',') : [],
+      requestIds: requestIdHeader ? splitRequestIds(requestIdHeader) : [],
       status: response.status,
       url: request.url,
       warnings: normalized ? [normalized] : [],
@@ -170,10 +179,17 @@ function normalizedWarning(response: Response): string | undefined {
  */
 export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined): AfterResponseHook {
   return async ({request, response}) => {
+    // Cheap guards first, so the body-reading is2FAError() probe below is only
+    // reached when it can matter: skip when no 2FA handler is configured, or
+    // when the request already carries a code (the retry — also the loop guard).
+    if (!twoFactorOptions || request.headers.has('Heroku-Two-Factor-Code')) {
+      return response
+    }
+
     const is2FAChallenge = response.status === 412
       || (response.status === 403 && await is2FAError(response))
 
-    if (is2FAChallenge && twoFactorOptions && !request.headers.has('Heroku-Two-Factor-Code')) {
+    if (is2FAChallenge) {
       return handle2FAChallenge(request, twoFactorOptions)
     }
 

@@ -51,12 +51,6 @@ export class RequestIdStore {
     return this.ids
   }
 
-  /** Reset the accumulated list. */
-  empty(): void {
-    this.ids = []
-    this.idSet.clear()
-  }
-
   /**
    * The header value to send on the next request: generate+accumulate a fresh
    * id, then apply the overflow guard. On overflow the OLDEST ids are dropped

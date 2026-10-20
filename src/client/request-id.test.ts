@@ -30,13 +30,6 @@ describe('RequestIdStore', () => {
     expect(store.headerValue).toBe('server-a,server-b,id-0')
   })
 
-  it('empty() resets the accumulated list', () => {
-    const store = new RequestIdStore(sequentialGenerator())
-    store.create()
-    store.empty()
-    expect(store.headerValue).toBe('')
-  })
-
   describe('nextHeaderValue', () => {
     it('accumulates ids across calls and returns the joined string', () => {
       const store = new RequestIdStore(sequentialGenerator())
