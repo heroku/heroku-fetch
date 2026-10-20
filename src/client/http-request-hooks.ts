@@ -112,6 +112,8 @@ export function createWarningAfterHook(
 ): AfterResponseHook {
   return ({response}) => {
     const normalized = normalizedWarning(response)
+    // The `has` check gates the `warn()` emission below, not the set insertion
+    // (which is already idempotent): it's what makes a repeat warning silent.
     if (!normalized || shownWarnings.has(normalized)) return
     if (shownWarnings.size >= MAX_SHOWN_WARNINGS) {
       // Bound memory on a long-lived client: evict the oldest surfaced warning

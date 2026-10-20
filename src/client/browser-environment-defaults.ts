@@ -36,7 +36,12 @@ export async function getDefaultDispatcher(): Promise<undefined> {
  * dispatcher. Browsers route through their own proxy stack, so there is
  * nothing to pair. Mirrors the Node `getDefaultFetch()` so consumers can call
  * it uniformly across environments.
+ *
+ * Bound to `globalThis` because the browser `fetch` is a WebIDL method that
+ * brand-checks its receiver: a detached reference (`const f = fetch; f(...)`)
+ * throws `Illegal invocation`, and consumers call this returned reference
+ * detached.
  */
 export async function getDefaultFetch(): Promise<FetchLike> {
-  return (input, init) => fetch(input, init)
+  return globalThis.fetch.bind(globalThis)
 }

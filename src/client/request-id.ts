@@ -33,7 +33,9 @@ export class RequestIdStore {
   /**
    * @param generate UUID generator; defaults to the platform's
    *   `crypto.randomUUID` (present on Node 18+ and in browsers). Injectable for
-   *   deterministic tests.
+   *   deterministic tests. Wrapped in an arrow rather than passed as a bare
+   *   `globalThis.crypto.randomUUID` because it's a method that brand-checks its
+   *   receiver — called unbound it throws `this` must be of type `Crypto`.
    */
   // eslint-disable-next-line n/no-unsupported-features/node-builtins -- global `crypto` is available on Node 22 (and in browsers); the lint engine's compatibility table conservatively marks it 23+. Using node:crypto would break the Node-agnostic core.
   constructor(private readonly generate: () => string = () => globalThis.crypto.randomUUID()) {}
