@@ -88,6 +88,22 @@ describe('HerokuApiClient', () => {
       client.setOption('timeout', 5000)
       // Timeout is updated internally
     })
+
+    it('accepts the live-mutable warn and onResponseMetadata callbacks', () => {
+      const client = new HerokuApiClient()
+      expect(() => client.setOption('warn', () => {})).not.toThrow()
+      expect(() => client.setOption('onResponseMetadata', () => {})).not.toThrow()
+    })
+
+    it('rejects options fixed at construction rather than silently no-opping', () => {
+      // These are baked into the cached ky instance at construction, so a
+      // post-construction change can't take effect — the client throws instead
+      // of accepting a mutation that would never land.
+      const client = new HerokuApiClient()
+      expect(() => client.setOption('headers', {'X-Custom': 'v'})).toThrow(/fixed at construction/)
+      expect(() => client.setOption('hooks', {})).toThrow(/fixed at construction/)
+      expect(() => client.setOption('defaultAccept', 'application/json')).toThrow(/fixed at construction/)
+    })
   })
 
   describe('HTTP methods', () => {
@@ -415,6 +431,72 @@ describe('HerokuApiClient', () => {
       expect(seen[0].url).toBe(`${baseUrl}/account`)
       expect(seen[0].requestId).toMatch(/^[0-9a-f-]{36}$/i)
       expect(seen[0].warnings).toEqual(['plan changing.'])
+    })
+  })
+
+  describe('two-factor retry (end-to-end)', () => {
+    // A 2FA challenge (403 with a `two_factor` id) is retried with the prompted
+    // code. The retry must go back through the client pipeline — same
+    // beforeRequest hooks (auth, Accept, Request-Id) and proxy-aware fetch — and
+    // its response must flow through the success-path hooks exactly once.
+    let server: Server
+    let baseUrl: string
+    let requests: {requestId: string | undefined; twoFactorCode: string | undefined}[]
+
+    beforeEach(async () => {
+      requests = []
+      server = createServer((request, response) => {
+        const twoFactorCode = request.headers['heroku-two-factor-code'] as string | undefined
+        const requestId = request.headers['request-id'] as string | undefined
+        requests.push({requestId, twoFactorCode})
+
+        if (!twoFactorCode) {
+          response.writeHead(403, {'Content-Type': 'application/json'})
+          response.end(JSON.stringify({id: 'two_factor', message: 'Two-factor code required.'}))
+          return
+        }
+
+        response.writeHead(200, {'Content-Type': 'application/json', 'Request-Id': requestId ?? ''})
+        response.end(JSON.stringify({ok: true}))
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('prompts for a code and retries through the client pipeline', async () => {
+      const seen: ResponseMetadata[] = []
+      const client = new HerokuApiClient({
+        baseUrl,
+        onResponseMetadata: metadata => seen.push(metadata),
+        service: 'custom',
+        token: 'test',
+        twoFactor: {onChallenge: () => '123456'},
+      })
+
+      const response = await client.get('/account')
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ok: true})
+      // Two hits: the challenge, then the retry carrying the 2FA code.
+      expect(requests).toHaveLength(2)
+      expect(requests[0].twoFactorCode).toBeUndefined()
+      expect(requests[1].twoFactorCode).toBe('123456')
+      // The retry ran through beforeRequest, so it still carries a Request-Id.
+      expect(requests[1].requestId).toBeTruthy()
+      // Success-path metadata fired exactly once (for the retried 200) — the
+      // retry client has no afterResponse hooks, so routing the retry through it
+      // doesn't double-run the main chain's metadata/consumer hooks.
+      expect(seen).toHaveLength(1)
+      expect(seen[0].status).toBe(200)
     })
   })
 

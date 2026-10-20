@@ -4,8 +4,6 @@
  * Handles detection and processing of 2FA challenges from the API.
  */
 
-import ky from 'ky'
-
 import type {HerokuErrorResponse, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugError} from '../debug-loggers.js'
@@ -30,12 +28,20 @@ export async function is2FAError(response: Response): Promise<boolean> {
 }
 
 /**
- * Handle a 2FA challenge by prompting for a code and retrying the request
+ * Handle a 2FA challenge by prompting for a code and retrying the request.
+ *
+ * The retry is sent through `retryThroughClient` — the client's own request
+ * pipeline (proxy-aware fetch, auth, Accept, and Request-Id hooks) — so it is
+ * routed and authenticated identically to the original request, rather than
+ * going out through a bare `fetch` that would bypass all of that. The retried
+ * response is returned to the caller's afterResponse chain, where the error,
+ * Request-Id, warning, metadata, and consumer hooks process it.
  */
 export async function handle2FAChallenge(
   request: Request,
   twoFactorOptions: TwoFactorOptions,
   twoFactorAttemptedRef: {value: boolean},
+  retryThroughClient: (request: Request) => Promise<Response>,
 ): Promise<Response> {
   twoFactorAttemptedRef.value = true
   debugAuth('2FA challenge detected, invoking callback')
@@ -57,7 +63,7 @@ export async function handle2FAChallenge(
       headers,
     })
 
-    const retryResponse = await ky(retryRequest)
+    const retryResponse = await retryThroughClient(retryRequest)
     twoFactorAttemptedRef.value = false
     return retryResponse
   } catch (error) {

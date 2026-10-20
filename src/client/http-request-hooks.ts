@@ -16,6 +16,14 @@ import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
 
 /**
+ * Upper bound on the per-client set of already-surfaced warnings. Dedupe stays
+ * a sliding window of the most recent warnings rather than the client's entire
+ * lifetime, so a long-lived client with many distinct warnings can't grow the
+ * set without limit.
+ */
+const MAX_SHOWN_WARNINGS = 256
+
+/**
  * Create a beforeRequest hook that adds authentication and custom headers
  */
 export function createBeforeRequestHook(
@@ -106,6 +114,14 @@ export function createWarningAfterHook(
   return ({response}) => {
     const normalized = normalizedWarning(response)
     if (!normalized || shownWarnings.has(normalized)) return
+    if (shownWarnings.size >= MAX_SHOWN_WARNINGS) {
+      // Bound memory on a long-lived client: evict the oldest surfaced warning
+      // (Sets iterate in insertion order) so dedupe becomes a sliding window
+      // rather than growing unbounded for the client's whole lifetime.
+      const oldest = shownWarnings.values().next().value
+      if (oldest !== undefined) shownWarnings.delete(oldest)
+    }
+
     shownWarnings.add(normalized)
     warn(normalized)
   }
@@ -142,24 +158,46 @@ function normalizedWarning(response: Response): string | undefined {
 }
 
 /**
- * Create an afterResponse hook that handles 2FA challenges and errors
+ * Create an afterResponse hook that detects a 2FA challenge (a 412, or a 403
+ * carrying the `two_factor` error id) and, when a 2FA handler is configured and
+ * the request hasn't already been retried, prompts for a code and re-issues the
+ * request.
+ *
+ * Registered before {@link createErrorAfterHook} so it sees the challenge
+ * response before it is thrown as an error. The retry is sent back through
+ * `retryThroughClient` (the client's own pipeline minus this afterResponse
+ * chain), and the retried response is returned so the remaining afterResponse
+ * hooks — error handling, Request-Id, warnings, metadata, consumer hooks —
+ * process it exactly as they would a first-attempt response. Returns the
+ * original response untouched when it isn't a handleable 2FA challenge.
  */
-export function createAfterResponseHook(
+export function create2FAAfterHook(
   twoFactorOptions: TwoFactorOptions | undefined,
   twoFactorAttemptedRef: {value: boolean},
+  retryThroughClient: (request: Request) => Promise<Response>,
 ): AfterResponseHook {
   return async ({request, response}) => {
-    debugResponse('%s %s -> %d', request.method, request.url, response.status)
-
-    // Handle 2FA challenge (can be 403 or 412)
     const is2FAChallenge = response.status === 412
       || (response.status === 403 && await is2FAError(response))
 
     if (is2FAChallenge && twoFactorOptions && !twoFactorAttemptedRef.value) {
-      return handle2FAChallenge(request, twoFactorOptions, twoFactorAttemptedRef)
+      return handle2FAChallenge(request, twoFactorOptions, twoFactorAttemptedRef, retryThroughClient)
     }
 
-    // Handle errors
+    return response
+  }
+}
+
+/**
+ * Create an afterResponse hook that throws a typed error on a non-ok response.
+ *
+ * Registered before the Request-Id, warning, metadata, and consumer hooks, so
+ * those run only on the success path (this throws and stops the chain first).
+ */
+export function createErrorAfterHook(): AfterResponseHook {
+  return async ({request, response}) => {
+    debugResponse('%s %s -> %d', request.method, request.url, response.status)
+
     if (!response.ok) {
       await handleErrorResponse(response)
     }

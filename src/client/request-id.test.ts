@@ -45,9 +45,10 @@ describe('RequestIdStore', () => {
       expect(store.nextHeaderValue()).toBe('id-2,id-1,id-0')
     })
 
-    it('resets to a single fresh id when the header would exceed 7KB', () => {
+    it('drops the oldest ids (keeping the newest) when the header would exceed 7KB', () => {
       // Each id is 4000 bytes, so the second accumulation (~8001 bytes) trips
-      // the 7168-byte cap and resets to just the newest id.
+      // the 7168-byte cap; the oldest id is dropped to make it fit, leaving the
+      // newest one rather than resetting to a brand-new id.
       let n = 0
       const store = new RequestIdStore(() => `${String(n++).padStart(4, '0')}${'x'.repeat(3996)}`)
 
@@ -55,11 +56,30 @@ describe('RequestIdStore', () => {
       expect(first).toHaveLength(4000) // '0000xxx…'
 
       const second = store.nextHeaderValue()
-      // Reset happened: a single id, not two comma-joined ones.
+      // Truncated to fit: a single id, not two comma-joined ones.
       expect(second).toHaveLength(4000)
       expect(second).not.toContain(',')
-      // It is a fresh id (the third generated: 0,1 were used, reset re-created with 2).
-      expect(second.startsWith('0002')).toBe(true)
+      // It is the newest id kept (the second generated), not a fresh reset — the
+      // just-created id is retained and the older '0000…' is dropped.
+      expect(second.startsWith('0001')).toBe(true)
+    })
+
+    it('keeps the most recent ids that still fit under the cap', () => {
+      // Ids are ~2867 bytes; two fit (~5735 < 7168) but three don't (~8603),
+      // so the chain settles at the two newest, dropping the oldest.
+      let n = 0
+      const store = new RequestIdStore(() => `${String(n++).padStart(4, '0')}${'y'.repeat(2863)}`)
+
+      store.nextHeaderValue() // 0000
+      store.nextHeaderValue() // 0001,0000
+      const third = store.nextHeaderValue()
+
+      const ids = third.split(',')
+      expect(ids).toHaveLength(2)
+      // Newest-first: the fresh id leads, the immediately-prior one follows; the
+      // oldest ('0000…') is evicted.
+      expect(ids[0].startsWith('0002')).toBe(true)
+      expect(ids[1].startsWith('0001')).toBe(true)
     })
 
     it('measures the cap in bytes, not characters', () => {

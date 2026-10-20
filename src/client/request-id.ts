@@ -26,6 +26,9 @@ function byteLength(value: string): number {
 
 export class RequestIdStore {
   private ids: string[] = []
+  // Mirrors `ids` for O(1) membership in track(), so dedupe stays linear in the
+  // ids being added rather than scanning the whole accumulated chain per id.
+  private readonly idSet = new Set<string>()
 
   /**
    * @param generate UUID generator; defaults to the platform's
@@ -42,26 +45,34 @@ export class RequestIdStore {
 
   /** Generate a new id, prepend it to the accumulated list, return the list. */
   create(): string[] {
-    this.ids = [this.generate(), ...this.ids]
+    const id = this.generate()
+    this.ids = [id, ...this.ids]
+    this.idSet.add(id)
     return this.ids
   }
 
   /** Reset the accumulated list. */
   empty(): void {
     this.ids = []
+    this.idSet.clear()
   }
 
   /**
    * The header value to send on the next request: generate+accumulate a fresh
-   * id, then apply the overflow guard. On overflow the list is RESET (not
-   * truncated) and a single fresh id is sent. Always returns the comma-joined
+   * id, then apply the overflow guard. On overflow the OLDEST ids are dropped
+   * (the chain is prepend-ordered, so the tail is oldest) until the header fits
+   * — keeping the newest end so correlation with the immediately preceding
+   * requests survives instead of being severed by a full reset. A lone id that
+   * already exceeds the cap is kept as-is. Always returns the comma-joined
    * string.
    */
   nextHeaderValue(): string {
     this.create()
-    if (byteLength(this.headerValue) > MAX_REQUEST_ID_BYTES) {
-      this.empty()
-      this.create()
+    while (this.ids.length > 1 && byteLength(this.headerValue) > MAX_REQUEST_ID_BYTES) {
+      const dropped = this.ids.pop()
+      if (dropped !== undefined) {
+        this.idSet.delete(dropped)
+      }
     }
 
     return this.headerValue
@@ -69,7 +80,11 @@ export class RequestIdStore {
 
   /** Prepend server-returned ids not already tracked (dedupe), return the list. */
   track(...ids: string[]): string[] {
-    const novel = ids.filter(id => !this.ids.includes(id))
+    const novel = ids.filter(id => !this.idSet.has(id))
+    for (const id of novel) {
+      this.idSet.add(id)
+    }
+
     this.ids = [...novel, ...this.ids]
     return this.ids
   }

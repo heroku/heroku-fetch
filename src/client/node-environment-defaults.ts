@@ -8,6 +8,13 @@ import {debugRequest} from '../debug-loggers.js'
 import {logScrubbed} from '../redact.js'
 
 /**
+ * A fetch `init` that also carries an undici `dispatcher`. The DOM `RequestInit`
+ * type has no `dispatcher` field, so this intersection is how we hand undici's
+ * `fetch` the proxy dispatcher without scattering casts at each call site.
+ */
+type DispatchInit = NonNullable<Parameters<typeof fetch>[1]> & {dispatcher?: unknown}
+
+/**
  * Get default token provider for Node.js (reads the HEROKU_API_KEY env var)
  *
  * heroku-fetch does not read stored credentials. To authenticate with
@@ -133,7 +140,8 @@ async function fetchThroughDispatcher(
   init?: Parameters<typeof fetch>[1],
 ): Promise<Response> {
   if (typeof input === 'string' || input instanceof URL) {
-    return undiciFetch(input, {...init, dispatcher} as Parameters<typeof fetch>[1])
+    const withDispatcher: DispatchInit = {...init, dispatcher}
+    return undiciFetch(input, withDispatcher)
   }
 
   const headers: Record<string, string> = {}
@@ -145,7 +153,7 @@ async function fetchThroughDispatcher(
   })
 
   const hasBody = input.method !== 'GET' && input.method !== 'HEAD'
-  return undiciFetch(input.url, {
+  const withDispatcher: DispatchInit = {
     body: hasBody ? await input.arrayBuffer() : undefined,
     headers,
     method: input.method,
@@ -153,5 +161,6 @@ async function fetchThroughDispatcher(
     signal: input.signal,
     ...init,
     dispatcher,
-  } as Parameters<typeof fetch>[1])
+  }
+  return undiciFetch(input.url, withDispatcher)
 }

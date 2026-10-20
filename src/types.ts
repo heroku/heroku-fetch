@@ -18,8 +18,8 @@ export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
  * so hooks cannot be changed per request.
  */
 export interface HerokuHooks {
-  afterResponse?: AfterResponseHook[];
-  beforeRequest?: BeforeRequestHook[];
+  afterResponse?: readonly AfterResponseHook[];
+  beforeRequest?: readonly BeforeRequestHook[];
 }
 
 /**

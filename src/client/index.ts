@@ -17,8 +17,9 @@ import type {
 
 import {debugAuth, debugRequest} from '../debug-loggers.js'
 import {
-  createAfterResponseHook,
+  create2FAAfterHook,
   createBeforeRequestHook,
+  createErrorAfterHook,
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
@@ -36,6 +37,12 @@ export class HerokuApiClient {
   // set of warnings already surfaced, so dedupe spans a multi-request session
   // but resets per client and parallel clients stay isolated.
   private readonly requestIds = new RequestIdStore()
+  // A second ky instance for the 2FA retry: same beforeRequest pipeline and
+  // proxy-aware fetch as the main client, but no afterResponse hooks. The retry
+  // response is handed back to the main client's afterResponse chain, which
+  // runs error/Request-Id/warning/metadata/consumer handling on it exactly
+  // once — so routing the retry here can't double-fire those hooks.
+  private retryClientPromise: null | Promise<KyInstance> = null
   private readonly shownWarnings = new Set<string>()
   private tokenProvider?: TokenProvider
   private twoFactorAttempted = {value: false}
@@ -75,14 +82,17 @@ export class HerokuApiClient {
     // env-var proxy support).
     this.kyOptions = {
       hooks: {
-        // Order matters: the error hook throws on a non-ok response, so the
-        // Request-Id tracking, warning, and metadata hooks after it run only on
-        // the success path.
+        // Order matters: the 2FA hook runs first (so it sees a challenge before
+        // it's thrown as an error and can retry), then the error hook throws on
+        // a non-ok response — so the Request-Id tracking, warning, and metadata
+        // hooks after it run only on the success path.
         afterResponse: [
-          createAfterResponseHook(
+          create2FAAfterHook(
             this.options.twoFactor,
             this.twoFactorAttempted,
+            request => this.retryThroughClient(request),
           ),
+          createErrorAfterHook(),
           createRequestIdAfterHook(this.requestIds),
           createWarningAfterHook(
             this.shownWarnings,
@@ -162,10 +172,21 @@ export class HerokuApiClient {
   ): void {
     if (key === 'token') {
       this.tokenProvider = value as TokenProvider
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.options as any)[key] = value
+      return
     }
+
+    // Only these are re-read on each request, so changing them takes effect.
+    // Everything else — hooks, headers, the Accept default, the 2FA handler,
+    // and the base URL derived from service/region — is baked into the cached
+    // ky instance at construction; mutating it here would silently no-op, so
+    // reject it rather than lie about the change landing.
+    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.options as Record<string, any>)[key] = value
+      return
+    }
+
+    throw new Error(`setOption: "${key}" is fixed at construction and cannot be changed on an existing client; pass it to the constructor instead.`)
   }
 
   /**
@@ -200,11 +221,33 @@ export class HerokuApiClient {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const fetch = await getDefaultFetch()
-        return ky.create({...this.kyOptions, fetch: fetch as typeof globalThis.fetch})
+        return ky.create({...this.kyOptions, fetch})
       })()
     }
 
     return this.clientPromise
+  }
+
+  /**
+   * Lazily construct the retry client used for 2FA re-issue: the same
+   * beforeRequest pipeline and proxy-aware fetch as `getClient`, but with
+   * no afterResponse hooks, so the retry's response is processed once by the
+   * main client's afterResponse chain rather than twice. Cached after the first
+   * call.
+   */
+  private async getRetryClient(): Promise<KyInstance> {
+    if (!this.retryClientPromise) {
+      this.retryClientPromise = (async () => {
+        const fetch = await getDefaultFetch()
+        return ky.create({
+          ...this.kyOptions,
+          fetch,
+          hooks: {...this.kyOptions.hooks, afterResponse: []},
+        })
+      })()
+    }
+
+    return this.retryClientPromise
   }
 
   /**
@@ -243,5 +286,14 @@ export class HerokuApiClient {
 
     const client = await this.getClient()
     return client(path, kyOptions)
+  }
+
+  /**
+   * Re-issue a request (with the 2FA code attached) through the retry client,
+   * which shares this client's beforeRequest pipeline and proxy-aware fetch.
+   */
+  private async retryThroughClient(request: Request): Promise<Response> {
+    const client = await this.getRetryClient()
+    return client(request)
   }
 }

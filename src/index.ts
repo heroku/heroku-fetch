@@ -14,17 +14,4 @@ export {
   getApiHost,
   getApiUrl,
 } from './host.js'
-export type {
-  FetchLike,
-  HerokuApiClientOptions,
-  HerokuError,
-  HerokuErrorResponse,
-  HerokuHooks,
-  HerokuService,
-  RequestOptions,
-  ResponseMetadata,
-  ServiceConfig,
-  TokenProvider,
-  TwoFactorOptions,
-} from './types.js'
-export type {AfterResponseHook, BeforeRequestHook} from 'ky'
+export type * from './public-types.js'
