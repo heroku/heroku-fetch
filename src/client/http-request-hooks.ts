@@ -136,8 +136,9 @@ export function createWarningAfterHook(
 export function createMetadataAfterHook(onMetadata: (metadata: ResponseMetadata) => void): AfterResponseHook {
   return ({request, response}) => {
     const normalized = normalizedWarning(response)
+    const requestIdHeader = response.headers.get(REQUEST_ID_HEADER)
     onMetadata({
-      requestId: response.headers.get(REQUEST_ID_HEADER) ?? undefined,
+      requestIds: requestIdHeader ? requestIdHeader.split(',') : [],
       status: response.status,
       url: request.url,
       warnings: normalized ? [normalized] : [],

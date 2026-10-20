@@ -1,6 +1,26 @@
-import type {AfterResponseHook, BeforeRequestHook} from 'ky'
-
 export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
+
+/**
+ * A `beforeRequest` hook: runs after the client's built-ins have prepared the
+ * `Request` and may inspect or mutate it, or return a replacement `Request`/
+ * `Response`. Structurally a subset of the underlying ky hook, but typed only
+ * on the standard `Request`/`Response` so the public API isn't welded to ky's
+ * major version — a ky upgrade that reshapes its own hook types can't become a
+ * breaking change here.
+ */
+export type HerokuBeforeRequestHook = (
+  context: {request: Request},
+) => Promise<Request | Response | void> | Request | Response | void
+
+/**
+ * An `afterResponse` hook: runs on the resolved success-path response (the
+ * built-in error hook throws on a non-2xx first) and may return a replacement
+ * `Response`. Typed only on the standard `Request`/`Response`, for the same
+ * decoupling reason as {@link HerokuBeforeRequestHook}.
+ */
+export type HerokuAfterResponseHook = (
+  context: {request: Request; response: Response},
+) => Promise<Response | void> | Response | void
 
 /**
  * Consumer-supplied ky hooks, merged with the client's built-in pipeline.
@@ -18,8 +38,8 @@ export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
  * so hooks cannot be changed per request.
  */
 export interface HerokuHooks {
-  afterResponse?: readonly AfterResponseHook[];
-  beforeRequest?: readonly BeforeRequestHook[];
+  afterResponse?: readonly HerokuAfterResponseHook[];
+  beforeRequest?: readonly HerokuBeforeRequestHook[];
 }
 
 /**
@@ -47,8 +67,13 @@ export type TokenProvider = (() => Promise<string | undefined> | string | undefi
  * from `get`/`post`/etc. unchanged — this is an additive side channel.
  */
 export interface ResponseMetadata {
-  /** The `Request-Id` the server echoed for this response, if present. */
-  requestId?: string;
+  /**
+   * The `Request-Id`s the server echoed for this response, newest first. The
+   * server returns them comma-joined; this is that header split into the
+   * individual ids (matching the client's internal correlation tracking).
+   * Empty when the response carried no `Request-Id`.
+   */
+  requestIds: string[];
   /** HTTP status code of the response. */
   status: number;
   /** Final request URL. */
@@ -104,9 +129,13 @@ export interface HerokuApiClientOptions {
   hooks?: HerokuHooks;
   /**
    * Callback invoked on the success path with structured {@link ResponseMetadata}
-   * for each completed response — request-id and warnings without re-parsing
+   * for each completed response — request-ids and warnings without re-parsing
    * headers. Runs only after built-in error handling accepts the response (a
    * non-2xx is thrown as a typed error and never reaches it). Omitted → no-op.
+   *
+   * Fires once per HTTP response, not once per logical operation: a caller that
+   * makes several requests (pagination, polling) receives several callbacks,
+   * with no built-in way to correlate them beyond the per-response metadata.
    */
   onResponseMetadata?: (metadata: ResponseMetadata) => void;
   /** Service region (e.g., 'eu', 'us') */

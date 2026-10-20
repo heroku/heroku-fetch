@@ -7,7 +7,9 @@
 
 export type {
   FetchLike,
+  HerokuAfterResponseHook,
   HerokuApiClientOptions,
+  HerokuBeforeRequestHook,
   HerokuError,
   HerokuErrorResponse,
   HerokuHooks,
@@ -18,4 +20,3 @@ export type {
   TokenProvider,
   TwoFactorOptions,
 } from './types.js'
-export type {AfterResponseHook, BeforeRequestHook} from 'ky'

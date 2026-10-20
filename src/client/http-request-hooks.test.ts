@@ -243,24 +243,30 @@ describe('createWarningAfterHook', () => {
 })
 
 describe('createMetadataAfterHook', () => {
-  it('reports request-id, status, url, and the normalized warning', () => {
+  it('reports request-ids (split from the header), status, url, and the normalized warning', () => {
     const metadata = collectMetadata({
       [REQUEST_ID_HEADER]: 'abc,def',
       'x-heroku-warning': 'warning: heads up',
     })
 
     expect(metadata).toEqual({
-      requestId: 'abc,def',
+      requestIds: ['abc', 'def'],
       status: 200,
       url: 'https://api.heroku.com/apps',
       warnings: ['heads up'],
     })
   })
 
-  it('reports an empty warnings list and absent request-id when neither is present', () => {
+  it('reports a single request-id as a one-element array', () => {
+    const metadata = collectMetadata({[REQUEST_ID_HEADER]: 'only-one'})
+
+    expect(metadata.requestIds).toEqual(['only-one'])
+  })
+
+  it('reports empty lists for request-ids and warnings when neither is present', () => {
     const metadata = collectMetadata({})
 
-    expect(metadata.requestId).toBeUndefined()
+    expect(metadata.requestIds).toEqual([])
     expect(metadata.warnings).toEqual([])
   })
 })
