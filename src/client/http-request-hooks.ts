@@ -24,29 +24,19 @@ import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handle
 const MAX_SHOWN_WARNINGS = 256
 
 /**
- * Create a beforeRequest hook that adds authentication and custom headers
+ * Create a beforeRequest hook that attaches the bearer token.
+ *
+ * Static headers (the `Accept` default and any consumer-supplied custom
+ * headers) are set on the ky instance via its `headers` option, so ky merges
+ * them with per-call headers (per-call winning) before this hook runs. Only the
+ * token is resolved here, since it comes from an async provider and so can't be
+ * a static instance header.
  */
 export function createBeforeRequestHook(
   getToken: () => Promise<string | undefined>,
-  defaultAccept: string | undefined,
-  customHeaders?: Record<string, string>,
   debug?: boolean,
 ): BeforeRequestHook {
   return async ({request}) => {
-    // Apply the service's default Accept header when the caller
-    // hasn't set one. Services that don't declare one (e.g. `custom`)
-    // skip this entirely.
-    if (defaultAccept && !request.headers.has('Accept')) {
-      request.headers.set('Accept', defaultAccept)
-    }
-
-    // Add custom headers from options
-    if (customHeaders) {
-      for (const [key, value] of Object.entries(customHeaders)) {
-        request.headers.set(key, value)
-      }
-    }
-
     // Add authorization header.
     //
     // We deliberately don't strip this on cross-origin redirects: the
@@ -161,28 +151,30 @@ function normalizedWarning(response: Response): string | undefined {
 /**
  * Create an afterResponse hook that detects a 2FA challenge (a 412, or a 403
  * carrying the `two_factor` error id) and, when a 2FA handler is configured and
- * the request hasn't already been retried, prompts for a code and re-issues the
- * request.
+ * the request isn't already carrying a code, prompts for one and forces a
+ * retry.
  *
  * Registered before {@link createErrorAfterHook} so it sees the challenge
- * response before it is thrown as an error. The retry is sent back through
- * `retryThroughClient` (the client's own pipeline minus this afterResponse
- * chain), and the retried response is returned so the remaining afterResponse
- * hooks — error handling, Request-Id, warnings, metadata, consumer hooks —
- * process it exactly as they would a first-attempt response. Returns the
- * original response untouched when it isn't a handleable 2FA challenge.
+ * response before it is thrown as an error. The retry is driven by ky's
+ * `ky.retry` (returned from {@link handle2FAChallenge}), which re-issues the
+ * request through this same client; the retried response then runs back through
+ * the full afterResponse chain — error handling, Request-Id, warnings,
+ * metadata, consumer hooks — exactly once.
+ *
+ * The `Heroku-Two-Factor-Code` header the retry carries is also the loop guard:
+ * if a request already bears a code and is still challenged (e.g. a wrong
+ * code), it is left to {@link createErrorAfterHook} to throw rather than
+ * retried again. This is per-request state, so concurrent requests on one
+ * client don't interfere. Returns the original response untouched when it isn't
+ * a handleable 2FA challenge.
  */
-export function create2FAAfterHook(
-  twoFactorOptions: TwoFactorOptions | undefined,
-  twoFactorAttemptedRef: {value: boolean},
-  retryThroughClient: (request: Request) => Promise<Response>,
-): AfterResponseHook {
+export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined): AfterResponseHook {
   return async ({request, response}) => {
     const is2FAChallenge = response.status === 412
       || (response.status === 403 && await is2FAError(response))
 
-    if (is2FAChallenge && twoFactorOptions && !twoFactorAttemptedRef.value) {
-      return handle2FAChallenge(request, twoFactorOptions, twoFactorAttemptedRef, retryThroughClient)
+    if (is2FAChallenge && twoFactorOptions && !request.headers.has('Heroku-Two-Factor-Code')) {
+      return handle2FAChallenge(request, twoFactorOptions)
     }
 
     return response

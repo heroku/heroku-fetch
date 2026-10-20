@@ -6,7 +6,7 @@ import {
 
 import type {ResponseMetadata} from '../types.js'
 
-import {AuthenticationError} from '../errors.js'
+import {AuthenticationError, TwoFactorRequiredError} from '../errors.js'
 import {HerokuApiClient} from './index.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
@@ -437,9 +437,10 @@ describe('HerokuApiClient', () => {
 
   describe('two-factor retry (end-to-end)', () => {
     // A 2FA challenge (403 with a `two_factor` id) is retried with the prompted
-    // code. The retry must go back through the client pipeline — same
-    // beforeRequest hooks (auth, Accept, Request-Id) and proxy-aware fetch — and
-    // its response must flow through the success-path hooks exactly once.
+    // code via ky's forced retry (`ky.retry`). The retry goes back through this
+    // same client — reusing its proxy-aware fetch and the request's headers
+    // (auth, Accept, Request-Id) — and its response flows through the
+    // success-path hooks exactly once.
     let server: Server
     let baseUrl: string
     let requests: {requestId: string | undefined; twoFactorCode: string | undefined}[]
@@ -451,7 +452,9 @@ describe('HerokuApiClient', () => {
         const requestId = request.headers['request-id'] as string | undefined
         requests.push({requestId, twoFactorCode})
 
-        if (!twoFactorCode) {
+        // Only the expected code is accepted; anything else (including no code)
+        // is answered with a fresh 2FA challenge.
+        if (twoFactorCode !== '123456') {
           response.writeHead(403, {'Content-Type': 'application/json'})
           response.end(JSON.stringify({id: 'two_factor', message: 'Two-factor code required.'}))
           return
@@ -491,13 +494,33 @@ describe('HerokuApiClient', () => {
       expect(requests).toHaveLength(2)
       expect(requests[0].twoFactorCode).toBeUndefined()
       expect(requests[1].twoFactorCode).toBe('123456')
-      // The retry ran through beforeRequest, so it still carries a Request-Id.
+      // The forced retry reuses the original request's headers, so it carries
+      // the same Request-Id (ky doesn't re-run beforeRequest on a retry).
       expect(requests[1].requestId).toBeTruthy()
-      // Success-path metadata fired exactly once (for the retried 200) — the
-      // retry client has no afterResponse hooks, so routing the retry through it
-      // doesn't double-run the main chain's metadata/consumer hooks.
+      expect(requests[1].requestId).toBe(requests[0].requestId)
+      // Success-path metadata fired exactly once (for the retried 200): the
+      // challenge response short-circuits the chain at the 2FA hook (it returns
+      // ky.retry), so error/metadata only run on the retried response.
       expect(seen).toHaveLength(1)
       expect(seen[0].status).toBe(200)
+    })
+
+    it('does not loop when the server rejects the submitted code', async () => {
+      // The server never accepts the code, so every attempt is a 2FA challenge.
+      // The retry carries `Heroku-Two-Factor-Code`, which is the loop guard: a
+      // second challenge is thrown as TwoFactorRequiredError rather than
+      // retried again.
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        twoFactor: {onChallenge: () => 'wrong'},
+      })
+
+      await expect(client.get('/account')).rejects.toBeInstanceOf(TwoFactorRequiredError)
+      // Exactly one retry: the original challenge plus the (still-rejected) retry.
+      expect(requests).toHaveLength(2)
+      expect(requests[1].twoFactorCode).toBe('wrong')
     })
   })
 
@@ -615,6 +638,18 @@ describe('HerokuApiClient', () => {
       await client.get('/apps')
 
       expect(received).toBe('application/vnd.heroku+json; version=3')
+    })
+
+    it('lets a per-call Accept override the client default (ky merges per-call over instance)', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'platform',
+        token: 'test',
+      })
+
+      await client.get('/apps', {headers: {Accept: 'application/vnd.heroku+json; version=3.sdk'}})
+
+      expect(received).toBe('application/vnd.heroku+json; version=3.sdk')
     })
   })
 })

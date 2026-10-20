@@ -72,12 +72,7 @@ describe('createBeforeRequestHook', () => {
   }
 
   it('redacts the Authorization header in debug output', async () => {
-    const hook = createBeforeRequestHook(
-      async () => 'super-secret-token',
-      undefined,
-      undefined,
-      true,
-    )
+    const hook = createBeforeRequestHook(async () => 'super-secret-token', true)
     const request = new Request('https://api.heroku.com/apps')
 
     const headers = await loggedHeaders(hook, request)
@@ -89,14 +84,14 @@ describe('createBeforeRequestHook', () => {
     expect(JSON.stringify(headers)).not.toContain('super-secret-token')
   })
 
-  it('redacts other sensitive headers passed as custom headers', async () => {
-    const hook = createBeforeRequestHook(
-      async () => {},
-      undefined,
-      {'X-Addon-SSO': 'sso-secret', 'X-Safe': 'ok'},
-      true,
-    )
-    const request = new Request('https://api.heroku.com/apps')
+  it('redacts other sensitive headers already on the request', async () => {
+    // Custom headers reach the request via ky's instance `headers` option, so
+    // they're present before this hook runs; it must still redact sensitive
+    // ones when logging.
+    const hook = createBeforeRequestHook(async () => {}, true)
+    const request = new Request('https://api.heroku.com/apps', {
+      headers: {'X-Addon-SSO': 'sso-secret', 'X-Safe': 'ok'},
+    })
 
     const headers = await loggedHeaders(hook, request)
 
@@ -106,59 +101,12 @@ describe('createBeforeRequestHook', () => {
   })
 
   it('does not log headers when debug is disabled', async () => {
-    const hook = createBeforeRequestHook(
-      async () => 'super-secret-token',
-      undefined,
-      undefined,
-      false,
-    )
+    const hook = createBeforeRequestHook(async () => 'super-secret-token', false)
     const request = new Request('https://api.heroku.com/apps')
 
     const headers = await loggedHeaders(hook, request)
 
     expect(headers).toBeUndefined()
-  })
-
-  describe('default Accept header', () => {
-    it('applies the resolved default when the request has no Accept', async () => {
-      const hook = createBeforeRequestHook(
-        async () => {},
-        'application/vnd.heroku+json; version=3.sdk',
-        undefined,
-        false,
-      )
-      const request = new Request('https://api.heroku.com/apps')
-
-      await hook({options: {} as NormalizedOptions, request})
-
-      expect(request.headers.get('Accept')).toBe('application/vnd.heroku+json; version=3.sdk')
-    })
-
-    it('does not clobber an Accept the caller already set (per-call withHeaders wins)', async () => {
-      const hook = createBeforeRequestHook(
-        async () => {},
-        'application/vnd.heroku+json; version=3.sdk',
-        undefined,
-        false,
-      )
-      const request = new Request('https://api.heroku.com/apps', {
-        headers: {Accept: 'application/vnd.heroku+json; version=3'},
-      })
-
-      await hook({options: {} as NormalizedOptions, request})
-
-      // The per-request Accept survives; the default is only a fallback.
-      expect(request.headers.get('Accept')).toBe('application/vnd.heroku+json; version=3')
-    })
-
-    it('applies no Accept when neither a default nor a request Accept is present', async () => {
-      const hook = createBeforeRequestHook(async () => {}, undefined, undefined, false)
-      const request = new Request('https://api.heroku.com/apps')
-
-      await hook({options: {} as NormalizedOptions, request})
-
-      expect(request.headers.has('Accept')).toBe(false)
-    })
   })
 })
 

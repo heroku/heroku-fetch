@@ -4,6 +4,8 @@
  * Handles detection and processing of 2FA challenges from the API.
  */
 
+import ky from 'ky'
+
 import type {HerokuErrorResponse, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugError} from '../debug-loggers.js'
@@ -28,46 +30,32 @@ export async function is2FAError(response: Response): Promise<boolean> {
 }
 
 /**
- * Handle a 2FA challenge by prompting for a code and retrying the request.
+ * Handle a 2FA challenge by prompting for a code and forcing a retry of the
+ * request with the `Heroku-Two-Factor-Code` header attached.
  *
- * The retry is sent through `retryThroughClient` — the client's own request
- * pipeline (proxy-aware fetch, auth, Accept, and Request-Id hooks) — so it is
- * routed and authenticated identically to the original request, rather than
- * going out through a bare `fetch` that would bypass all of that. The retried
- * response is returned to the caller's afterResponse chain, where the error,
- * Request-Id, warning, metadata, and consumer hooks process it.
+ * Returns ky's forced-retry marker (`ky.retry`) so ky re-issues the request
+ * through this same client — reusing its fetch, auth, and the original
+ * request's per-call timeout and abort signal — and runs the retried response
+ * back through the full afterResponse chain (error handling, Request-Id,
+ * warnings, metadata, and consumer hooks) exactly once. The forced retry counts
+ * against `retry.limit` and is observable in `beforeRetry` as a
+ * `ForceRetryError`.
  */
 export async function handle2FAChallenge(
   request: Request,
   twoFactorOptions: TwoFactorOptions,
-  twoFactorAttemptedRef: {value: boolean},
-  retryThroughClient: (request: Request) => Promise<Response>,
-): Promise<Response> {
-  twoFactorAttemptedRef.value = true
+): Promise<ReturnType<typeof ky.retry>> {
   debugAuth('2FA challenge detected, invoking callback')
 
   try {
     const twoFactorCode = await twoFactorOptions.onChallenge()
     debugAuth('2FA code received, retrying request')
 
-    // Retry the request with 2FA code
-    const headers: Record<string, string> = {}
-    // eslint-disable-next-line unicorn/no-array-for-each
-    request.headers.forEach((value, key) => {
-      headers[key] = value
-    })
+    const headers = new Headers(request.headers)
+    headers.set('Heroku-Two-Factor-Code', twoFactorCode)
 
-    headers['Heroku-Two-Factor-Code'] = twoFactorCode
-
-    const retryRequest = new Request(request, {
-      headers,
-    })
-
-    const retryResponse = await retryThroughClient(retryRequest)
-    twoFactorAttemptedRef.value = false
-    return retryResponse
+    return ky.retry({code: 'TWO_FACTOR', request: new Request(request, {headers})})
   } catch (error) {
-    twoFactorAttemptedRef.value = false
     await logScrubbed(debugError, '2FA retry failed: %O', error)
     throw error
   }

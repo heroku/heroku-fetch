@@ -37,15 +37,8 @@ export class HerokuApiClient {
   // set of warnings already surfaced, so dedupe spans a multi-request session
   // but resets per client and parallel clients stay isolated.
   private readonly requestIds = new RequestIdStore()
-  // A second ky instance for the 2FA retry: same beforeRequest pipeline and
-  // proxy-aware fetch as the main client, but no afterResponse hooks. The retry
-  // response is handed back to the main client's afterResponse chain, which
-  // runs error/Request-Id/warning/metadata/consumer handling on it exactly
-  // once — so routing the retry here can't double-fire those hooks.
-  private retryClientPromise: null | Promise<KyInstance> = null
   private readonly shownWarnings = new Set<string>()
   private tokenProvider?: TokenProvider
-  private twoFactorAttempted = {value: false}
 
   constructor(options: HerokuApiClientOptions = {}) {
     this.options = {
@@ -80,18 +73,25 @@ export class HerokuApiClient {
     // Stash the ky options; the actual ky instance is built lazily so
     // we can await getDefaultFetch() (Node loads undici dynamically for
     // env-var proxy support).
+    // Static headers go on the instance so ky merges them with per-call headers
+    // (per-call winning). A per-client `defaultAccept` override wins over the
+    // shared service default; services that declare no default (e.g. `custom`)
+    // and no override contribute no Accept at all.
+    const defaultAccept = options.defaultAccept ?? serviceConfig.defaultAccept
+    const headers: Record<string, string> = {...options.headers}
+    if (defaultAccept && !('accept' in headers) && !('Accept' in headers)) {
+      headers.Accept = defaultAccept
+    }
+
     this.kyOptions = {
+      headers,
       hooks: {
         // Order matters: the 2FA hook runs first (so it sees a challenge before
-        // it's thrown as an error and can retry), then the error hook throws on
-        // a non-ok response — so the Request-Id tracking, warning, and metadata
-        // hooks after it run only on the success path.
+        // it's thrown as an error and can force a retry), then the error hook
+        // throws on a non-ok response — so the Request-Id tracking, warning, and
+        // metadata hooks after it run only on the success path.
         afterResponse: [
-          create2FAAfterHook(
-            this.options.twoFactor,
-            this.twoFactorAttempted,
-            request => this.retryThroughClient(request),
-          ),
+          create2FAAfterHook(this.options.twoFactor),
           createErrorAfterHook(),
           createRequestIdAfterHook(this.requestIds),
           createWarningAfterHook(
@@ -104,17 +104,10 @@ export class HerokuApiClient {
           ...(options.hooks?.afterResponse ?? []),
         ],
         beforeRequest: [
-          createBeforeRequestHook(
-            () => this.getToken(),
-            // A per-client override wins over the shared service default, but
-            // is still only applied when the request has no Accept of its own.
-            options.defaultAccept ?? serviceConfig.defaultAccept,
-            options.headers,
-            this.options.debug,
-          ),
+          createBeforeRequestHook(() => this.getToken(), this.options.debug),
           createRequestIdBeforeHook(this.requestIds),
           // Consumer hooks run last: they see (and may override) the fully
-          // prepared request after auth, Accept, and Request-Id are attached.
+          // prepared request after auth and Request-Id are attached.
           ...(options.hooks?.beforeRequest ?? []),
         ],
       },
@@ -196,7 +189,10 @@ export class HerokuApiClient {
     debugRequest('STREAM %s', path)
 
     const kyOptions: KyOptions = {
-      headers: options?.headers,
+      // Only set headers when the caller supplied some: a literal
+      // `headers: undefined` would clear the instance headers (the Accept
+      // default and custom headers) ky merges in, not leave them untouched.
+      ...(options?.headers && {headers: options.headers}),
       method: 'GET',
       searchParams: options?.searchParams,
       signal: options?.signal,
@@ -229,28 +225,6 @@ export class HerokuApiClient {
   }
 
   /**
-   * Lazily construct the retry client used for 2FA re-issue: the same
-   * beforeRequest pipeline and proxy-aware fetch as `getClient`, but with
-   * no afterResponse hooks, so the retry's response is processed once by the
-   * main client's afterResponse chain rather than twice. Cached after the first
-   * call.
-   */
-  private async getRetryClient(): Promise<KyInstance> {
-    if (!this.retryClientPromise) {
-      this.retryClientPromise = (async () => {
-        const fetch = await getDefaultFetch()
-        return ky.create({
-          ...this.kyOptions,
-          fetch,
-          hooks: {...this.kyOptions.hooks, afterResponse: []},
-        })
-      })()
-    }
-
-    return this.retryClientPromise
-  }
-
-  /**
    * Get the authorization token
    */
   private async getToken(): Promise<string | undefined> {
@@ -273,7 +247,10 @@ export class HerokuApiClient {
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
     const kyOptions: KyOptions = {
-      headers: options?.headers,
+      // Only set headers when the caller supplied some: a literal
+      // `headers: undefined` would clear the instance headers (the Accept
+      // default and custom headers) ky merges in, not leave them untouched.
+      ...(options?.headers && {headers: options.headers}),
       method: options?.method || 'GET',
       searchParams: options?.searchParams,
       signal: options?.signal,
@@ -286,14 +263,5 @@ export class HerokuApiClient {
 
     const client = await this.getClient()
     return client(path, kyOptions)
-  }
-
-  /**
-   * Re-issue a request (with the 2FA code attached) through the retry client,
-   * which shares this client's beforeRequest pipeline and proxy-aware fetch.
-   */
-  private async retryThroughClient(request: Request): Promise<Response> {
-    const client = await this.getRetryClient()
-    return client(request)
   }
 }
