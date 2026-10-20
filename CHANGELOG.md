@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.0...heroku-fetch-v0.2.1) (2026-10-20)
+
+
+### Features
+
+* cross-cutting request behaviors (consumer hooks, response metadata, Request-Id, warning surfacing) ([#84](https://github.com/heroku/heroku-fetch/issues/84)) ([ed1ccb0](https://github.com/heroku/heroku-fetch/commit/ed1ccb0d5d4a9493d1465156022e478ef9cb32c4))
+
 ## [0.2.0](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.1.6...heroku-fetch-v0.2.0) (2026-10-16)
 
 
