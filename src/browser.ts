@@ -16,13 +16,4 @@ export {
   RateLimitError,
   TwoFactorRequiredError,
 } from './errors.js'
-export type {
-  HerokuApiClientOptions,
-  HerokuError,
-  HerokuErrorResponse,
-  HerokuService,
-  RequestOptions,
-  ServiceConfig,
-  TokenProvider,
-  TwoFactorOptions,
-} from './types.js'
+export type * from './public-types.js'

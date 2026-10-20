@@ -30,38 +30,38 @@ export async function is2FAError(response: Response): Promise<boolean> {
 }
 
 /**
- * Handle a 2FA challenge by prompting for a code and retrying the request
+ * Handle a 2FA challenge by prompting for a code and forcing a retry of the
+ * request with the `Heroku-Two-Factor-Code` header attached.
+ *
+ * Returns ky's forced-retry marker (`ky.retry`) so ky re-issues the request
+ * through this same client — reusing its fetch, auth, and the original
+ * request's per-call timeout and abort signal — and runs the retried response
+ * back through the full afterResponse chain (error handling, Request-Id,
+ * warnings, metadata, and consumer hooks) exactly once. The forced retry counts
+ * against `retry.limit` and is observable in `beforeRetry` as a
+ * `ForceRetryError`.
+ *
+ * Because it draws on the same retry budget as ky's transport retries, a
+ * request that already exhausted `retry.limit` on network/timeout retries would
+ * surface the raw `ForceRetryError` rather than re-issuing. In practice a 2FA
+ * challenge arrives on the first attempt (before any transport retry), so the
+ * budget is intact; this edge only matters if that assumption ever breaks.
  */
 export async function handle2FAChallenge(
   request: Request,
   twoFactorOptions: TwoFactorOptions,
-  twoFactorAttemptedRef: {value: boolean},
-): Promise<Response> {
-  twoFactorAttemptedRef.value = true
+): Promise<ReturnType<typeof ky.retry>> {
   debugAuth('2FA challenge detected, invoking callback')
 
   try {
     const twoFactorCode = await twoFactorOptions.onChallenge()
     debugAuth('2FA code received, retrying request')
 
-    // Retry the request with 2FA code
-    const headers: Record<string, string> = {}
-    // eslint-disable-next-line unicorn/no-array-for-each
-    request.headers.forEach((value, key) => {
-      headers[key] = value
-    })
+    const headers = new Headers(request.headers)
+    headers.set('Heroku-Two-Factor-Code', twoFactorCode)
 
-    headers['Heroku-Two-Factor-Code'] = twoFactorCode
-
-    const retryRequest = new Request(request, {
-      headers,
-    })
-
-    const retryResponse = await ky(retryRequest)
-    twoFactorAttemptedRef.value = false
-    return retryResponse
+    return ky.retry({code: 'TWO_FACTOR', request: new Request(request, {headers})})
   } catch (error) {
-    twoFactorAttemptedRef.value = false
     await logScrubbed(debugError, '2FA retry failed: %O', error)
     throw error
   }

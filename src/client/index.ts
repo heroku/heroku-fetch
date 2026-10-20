@@ -6,7 +6,7 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultDispatcher, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -16,7 +16,16 @@ import type {
 } from '../types.js'
 
 import {debugAuth, debugRequest} from '../debug-loggers.js'
-import {createAfterResponseHook, createBeforeRequestHook} from './http-request-hooks.js'
+import {
+  create2FAAfterHook,
+  createBeforeRequestHook,
+  createErrorAfterHook,
+  createMetadataAfterHook,
+  createRequestIdAfterHook,
+  createRequestIdBeforeHook,
+  createWarningAfterHook,
+} from './http-request-hooks.js'
+import {RequestIdStore} from './request-id.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
 export class HerokuApiClient {
@@ -24,8 +33,12 @@ export class HerokuApiClient {
   private kyOptions: KyOptions
   private options: Partial<HerokuApiClientOptions>
     & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
+  // Per-client cross-cutting request state: the Request-Id accumulation and the
+  // set of warnings already surfaced, so dedupe spans a multi-request session
+  // but resets per client and parallel clients stay isolated.
+  private readonly requestIds = new RequestIdStore()
+  private readonly shownWarnings = new Set<string>()
   private tokenProvider?: TokenProvider
-  private twoFactorAttempted = {value: false}
 
   constructor(options: HerokuApiClientOptions = {}) {
     this.options = {
@@ -58,25 +71,48 @@ export class HerokuApiClient {
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
     // Stash the ky options; the actual ky instance is built lazily so
-    // we can await getDefaultDispatcher() (Node loads undici
-    // dynamically for env-var proxy support).
+    // we can await getDefaultFetch() (Node loads undici dynamically for
+    // env-var proxy support).
+    // Static headers go on the instance so ky merges them with per-call headers
+    // (per-call winning). A per-client `defaultAccept` override wins over the
+    // shared service default; services that declare no default (e.g. `custom`)
+    // and no override contribute no Accept at all.
+    const defaultAccept = options.defaultAccept ?? serviceConfig.defaultAccept
+    const headers: Record<string, string> = {...options.headers}
+    // Case-insensitive check: a consumer may have supplied Accept under any
+    // casing, and ky merges headers case-insensitively (last write wins), so a
+    // plain `'Accept' in headers` test would miss a lowercase `accept` and let
+    // our default clobber the consumer's choice.
+    if (defaultAccept && !new Headers(options.headers).has('accept')) {
+      headers.Accept = defaultAccept
+    }
+
     this.kyOptions = {
+      headers,
       hooks: {
+        // Order matters: the 2FA hook runs first (so it sees a challenge before
+        // it's thrown as an error and can force a retry), then the error hook
+        // throws on a non-ok response — so the Request-Id tracking, warning, and
+        // metadata hooks after it run only on the success path.
         afterResponse: [
-          createAfterResponseHook(
-            this.options.twoFactor,
-            this.twoFactorAttempted,
+          create2FAAfterHook(this.options.twoFactor),
+          createErrorAfterHook(),
+          createRequestIdAfterHook(this.requestIds),
+          createWarningAfterHook(
+            this.shownWarnings,
+            message => this.options.warn?.(message),
           ),
+          createMetadataAfterHook(metadata => this.options.onResponseMetadata?.(metadata)),
+          // Consumer hooks run last: they see the resolved success-path
+          // response (the error-handling built-in above throws on non-2xx).
+          ...(options.hooks?.afterResponse ?? []),
         ],
         beforeRequest: [
-          createBeforeRequestHook(
-            () => this.getToken(),
-            // A per-client override wins over the shared service default, but
-            // is still only applied when the request has no Accept of its own.
-            options.defaultAccept ?? serviceConfig.defaultAccept,
-            options.headers,
-            this.options.debug,
-          ),
+          createBeforeRequestHook(() => this.getToken(), this.options.debug),
+          createRequestIdBeforeHook(this.requestIds),
+          // Consumer hooks run last: they see (and may override) the fully
+          // prepared request after auth and Request-Id are attached.
+          ...(options.hooks?.beforeRequest ?? []),
         ],
       },
       prefix: baseUrl,
@@ -133,10 +169,21 @@ export class HerokuApiClient {
   ): void {
     if (key === 'token') {
       this.tokenProvider = value as TokenProvider
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.options as any)[key] = value
+      return
     }
+
+    // Only these are re-read on each request, so changing them takes effect.
+    // Everything else — hooks, headers, the Accept default, the 2FA handler,
+    // and the base URL derived from service/region — is baked into the cached
+    // ky instance at construction; mutating it here would silently no-op, so
+    // reject it rather than lie about the change landing.
+    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.options as Record<string, any>)[key] = value
+      return
+    }
+
+    throw new Error(`setOption: "${key}" is fixed at construction and cannot be changed on an existing client; pass it to the constructor instead.`)
   }
 
   /**
@@ -146,10 +193,13 @@ export class HerokuApiClient {
     debugRequest('STREAM %s', path)
 
     const kyOptions: KyOptions = {
-      headers: options?.headers,
+      // Only set these when the caller supplied them: a literal `undefined`
+      // overrides (and for headers, clears) what ky merges from the instance,
+      // rather than leaving the instance value untouched.
+      ...(options?.headers && {headers: options.headers}),
+      ...(options?.searchParams && {searchParams: options.searchParams}),
+      ...(options?.signal && {signal: options.signal}),
       method: 'GET',
-      searchParams: options?.searchParams,
-      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 
@@ -158,19 +208,20 @@ export class HerokuApiClient {
   }
 
   /**
-   * Lazily construct ky with an env-aware undici dispatcher (Node)
-   * or no dispatcher (browser). Cached after the first call.
+   * Lazily construct ky over a fetch that is proxy-aware on Node (undici's own
+   * fetch paired with an env-var dispatcher) and the global fetch in the
+   * browser. Cached after the first call.
+   *
+   * We drive ky through `fetch` rather than ky's `dispatcher` option because
+   * ky calls the global `fetch`, which on Node 22 is backed by a different
+   * undici than our dispatcher and rejects it (`invalid onRequestStart
+   * method`). `getDefaultFetch()` returns a fetch from the matching undici.
    */
   private async getClient(): Promise<KyInstance> {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
-        const dispatcher = await getDefaultDispatcher()
-        // ky's type definitions don't include `dispatcher`; it's
-        // passed through to fetch as undici expects it.
-        const opts: KyOptions = dispatcher
-          ? ({...this.kyOptions, dispatcher} as never)
-          : this.kyOptions
-        return ky.create(opts)
+        const fetch = await getDefaultFetch()
+        return ky.create({...this.kyOptions, fetch})
       })()
     }
 
@@ -200,10 +251,13 @@ export class HerokuApiClient {
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
     const kyOptions: KyOptions = {
-      headers: options?.headers,
+      // Only set these when the caller supplied them: a literal `undefined`
+      // overrides (and for headers, clears) what ky merges from the instance,
+      // rather than leaving the instance value untouched.
+      ...(options?.headers && {headers: options.headers}),
+      ...(options?.searchParams && {searchParams: options.searchParams}),
+      ...(options?.signal && {signal: options.signal}),
       method: options?.method || 'GET',
-      searchParams: options?.searchParams,
-      signal: options?.signal,
       timeout: options?.timeout || this.options.timeout,
     }
 

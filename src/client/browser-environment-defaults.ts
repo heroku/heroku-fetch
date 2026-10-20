@@ -3,7 +3,7 @@
  * These are minimal since browsers don't have file system or CLI access
  */
 
-import type {TokenProvider, TwoFactorOptions} from '../types.js'
+import type {FetchLike, TokenProvider, TwoFactorOptions} from '../types.js'
 
 /**
  * Get default token provider for browsers (none - must be explicitly provided)
@@ -29,4 +29,19 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
  */
 export async function getDefaultDispatcher(): Promise<undefined> {
   return undefined
+}
+
+/**
+ * Get a default `fetch` for the browser: the global `fetch`, with no
+ * dispatcher. Browsers route through their own proxy stack, so there is
+ * nothing to pair. Mirrors the Node `getDefaultFetch()` so consumers can call
+ * it uniformly across environments.
+ *
+ * Bound to `globalThis` because the browser `fetch` is a WebIDL method that
+ * brand-checks its receiver: a detached reference (`const f = fetch; f(...)`)
+ * throws `Illegal invocation`, and consumers call this returned reference
+ * detached.
+ */
+export async function getDefaultFetch(): Promise<FetchLike> {
+  return globalThis.fetch.bind(globalThis)
 }
