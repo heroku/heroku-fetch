@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.1...heroku-fetch-v0.2.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* surface API message in HerokuApiError and subclasses ([#87](https://github.com/heroku/heroku-fetch/issues/87)) ([c2c5ca9](https://github.com/heroku/heroku-fetch/commit/c2c5ca9116e462add5d916fc25c92f7626e81cff))
+
 ## [0.2.1](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.0...heroku-fetch-v0.2.1) (2026-10-20)
 
 
