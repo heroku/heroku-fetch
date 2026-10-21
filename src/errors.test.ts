@@ -20,6 +20,23 @@ describe('Error classes', () => {
       expect(error.name).toBe('HerokuApiError')
     })
 
+    it('should use the error body message when present', () => {
+      const errorBody = {
+        id: 'test_error',
+        message: 'Test message',
+      }
+      const error = new HerokuApiError('Test error', 400, undefined, errorBody)
+      expect(error.message).toBe('Test message')
+    })
+
+    it('falls back to the given message when the error body has no message', () => {
+      const errorBody = {
+        id: 'test_error',
+      }
+      const error = new HerokuApiError('Test error', 400, undefined, errorBody)
+      expect(error.message).toBe('Test error')
+    })
+
     it('should include error body details', () => {
       const errorBody = {
         errors: [{id: 'error1', message: 'Error 1'}],
@@ -76,6 +93,12 @@ describe('Error classes', () => {
       expect(error.statusCode).toBe(412)
       expect(error.name).toBe('TwoFactorRequiredError')
     })
+
+    it('should use the error body message when present', () => {
+      const mockResponse = new Response(null, {status: 412})
+      const error = new TwoFactorRequiredError(mockResponse, {id: 'two_factor', message: 'Two-factor code required.'})
+      expect(error.message).toBe('Two-factor code required.')
+    })
   })
 
   describe('AuthenticationError', () => {
@@ -87,6 +110,12 @@ describe('Error classes', () => {
       expect(error.message).toBe('Authentication failed')
       expect(error.statusCode).toBe(401)
       expect(error.name).toBe('AuthenticationError')
+    })
+
+    it('should use the error body message when present', () => {
+      const mockResponse = new Response(null, {status: 401})
+      const error = new AuthenticationError(mockResponse, {id: 'unauthorized', message: 'Invalid credentials provided.'})
+      expect(error.message).toBe('Invalid credentials provided.')
     })
   })
 
@@ -117,6 +146,12 @@ describe('Error classes', () => {
       expect(error.message).toBe('Rate limit exceeded')
       expect(error.statusCode).toBe(429)
       expect(error.name).toBe('RateLimitError')
+    })
+
+    it('should use the error body message when present', () => {
+      const mockResponse = new Response(null, {status: 429})
+      const error = new RateLimitError(mockResponse, {id: 'rate_limit', message: 'Too many requests, please slow down.'})
+      expect(error.message).toBe('Too many requests, please slow down.')
     })
 
     it('should extract Retry-After header', () => {

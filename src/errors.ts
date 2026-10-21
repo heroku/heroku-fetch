@@ -16,8 +16,8 @@ export class HerokuApiError extends Error {
   public response?: Response
   public statusCode: number
 
-  constructor(message: string, statusCode: number, response?: Response, errorBody?: HerokuErrorResponse) {
-    super(message)
+  constructor(fallbackMessage: string, statusCode: number, response?: Response, errorBody?: HerokuErrorResponse) {
+    super(errorBody?.message || fallbackMessage)
     this.name = 'HerokuApiError'
     this.statusCode = statusCode
     this.response = response
@@ -60,7 +60,7 @@ export class AuthenticationError extends HerokuApiError {
 
 export class NotFoundError extends HerokuApiError {
   constructor(response: Response, errorBody?: HerokuErrorResponse) {
-    super(errorBody?.message || 'Resource not found', 404, response, errorBody)
+    super('Resource not found', 404, response, errorBody)
     this.name = 'NotFoundError'
 
     if (Error.captureStackTrace) {
