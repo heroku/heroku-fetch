@@ -142,6 +142,16 @@ export interface HerokuApiClientOptions {
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */
   service?: HerokuService;
+  /**
+   * Default `AbortSignal` applied to every request this client makes: when it
+   * fires, all in-flight and subsequent requests abort. Re-read per request, so
+   * it may also be changed later via `setOption('signal', …)`. Composed with
+   * (not replaced by) a per-call {@link RequestOptions.signal} — if both are
+   * supplied, either firing aborts that request — and composed with the
+   * client's `timeout` by the underlying fetch layer. Omitted → no
+   * client-level abort.
+   */
+  signal?: AbortSignal;
   /** Request timeout in milliseconds */
   timeout?: number;
   /** Static bearer token or function to retrieve token */

@@ -95,6 +95,11 @@ describe('HerokuApiClient', () => {
       expect(() => client.setOption('onResponseMetadata', () => {})).not.toThrow()
     })
 
+    it('accepts a live-mutable signal (re-read on each request)', () => {
+      const client = new HerokuApiClient()
+      expect(() => client.setOption('signal', new AbortController().signal)).not.toThrow()
+    })
+
     it('rejects options fixed at construction rather than silently no-opping', () => {
       // These are baked into the cached ky instance at construction, so a
       // post-construction change can't take effect — the client throws instead
@@ -168,6 +173,66 @@ describe('HerokuApiClient', () => {
       const controller = new AbortController()
       const pending = client.stream('/never', {signal: controller.signal})
       controller.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+
+    it('rejects an in-flight request when a client-level signal is aborted', async () => {
+      const controller = new AbortController()
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        signal: controller.signal,
+        timeout: 60_000,
+        token: 'test',
+      })
+      const pending = client.get('/never')
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+
+    it('rejects an in-flight request when a signal set via setOption is aborted', async () => {
+      const controller = new AbortController()
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        timeout: 60_000,
+        token: 'test',
+      })
+      client.setOption('signal', controller.signal)
+      const pending = client.get('/never')
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+
+    it('composes signals — the client-level signal aborts even when a per-request signal is also supplied', async () => {
+      const clientController = new AbortController()
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        signal: clientController.signal,
+        timeout: 60_000,
+        token: 'test',
+      })
+      // A separate, never-aborted per-request signal must not shadow the
+      // client-level one.
+      const requestController = new AbortController()
+      const pending = client.get('/never', {signal: requestController.signal})
+      clientController.abort()
+      await expect(pending).rejects.toMatchObject({name: 'AbortError'})
+    })
+
+    it('composes signals — the per-request signal still aborts when a client-level signal is also set', async () => {
+      const clientController = new AbortController()
+      const client = new HerokuApiClient({
+        baseUrl: HANGING_URL,
+        service: 'custom',
+        signal: clientController.signal,
+        timeout: 60_000,
+        token: 'test',
+      })
+      const requestController = new AbortController()
+      const pending = client.get('/never', {signal: requestController.signal})
+      requestController.abort()
       await expect(pending).rejects.toMatchObject({name: 'AbortError'})
     })
   })

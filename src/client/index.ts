@@ -28,6 +28,23 @@ import {
 import {RequestIdStore} from './request-id.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
 
+/**
+ * Combine zero or more optional abort signals into one. Returns `undefined`
+ * when none are present (so callers can omit `signal` entirely rather than pass
+ * a signal that never fires), the single signal when only one is present, and
+ * an `AbortSignal.any(...)` composite when several are — the composite aborts as
+ * soon as any input does. Lets a client-level default signal and a per-request
+ * signal both abort the same request instead of one shadowing the other.
+ */
+function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const present = signals.filter((signal): signal is AbortSignal => signal !== undefined)
+  if (present.length <= 1) {
+    return present[0]
+  }
+
+  return AbortSignal.any(present)
+}
+
 export class HerokuApiClient {
   private clientPromise: null | Promise<KyInstance> = null
   private kyOptions: KyOptions
@@ -177,7 +194,7 @@ export class HerokuApiClient {
     // and the base URL derived from service/region — is baked into the cached
     // ky instance at construction; mutating it here would silently no-op, so
     // reject it rather than lie about the change landing.
-    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata') {
+    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.options as Record<string, any>)[key] = value
       return
@@ -192,13 +209,14 @@ export class HerokuApiClient {
   public async stream(path: string, options?: RequestOptions): Promise<Response> {
     debugRequest('STREAM %s', path)
 
+    const signal = combineSignals(this.options.signal, options?.signal)
     const kyOptions: KyOptions = {
       // Only set these when the caller supplied them: a literal `undefined`
       // overrides (and for headers, clears) what ky merges from the instance,
       // rather than leaving the instance value untouched.
       ...(options?.headers && {headers: options.headers}),
       ...(options?.searchParams && {searchParams: options.searchParams}),
-      ...(options?.signal && {signal: options.signal}),
+      ...(signal && {signal}),
       method: 'GET',
       timeout: options?.timeout || this.options.timeout,
     }
@@ -250,13 +268,14 @@ export class HerokuApiClient {
     path: string,
     options?: RequestOptions & {body?: unknown; method?: string;},
   ): Promise<Response> {
+    const signal = combineSignals(this.options.signal, options?.signal)
     const kyOptions: KyOptions = {
       // Only set these when the caller supplied them: a literal `undefined`
       // overrides (and for headers, clears) what ky merges from the instance,
       // rather than leaving the instance value untouched.
       ...(options?.headers && {headers: options.headers}),
       ...(options?.searchParams && {searchParams: options.searchParams}),
-      ...(options?.signal && {signal: options.signal}),
+      ...(signal && {signal}),
       method: options?.method || 'GET',
       timeout: options?.timeout || this.options.timeout,
     }
