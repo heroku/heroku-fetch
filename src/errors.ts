@@ -60,7 +60,7 @@ export class AuthenticationError extends HerokuApiError {
 
 export class NotFoundError extends HerokuApiError {
   constructor(response: Response, errorBody?: HerokuErrorResponse) {
-    super('Resource not found', 404, response, errorBody)
+    super(errorBody?.message || 'Resource not found', 404, response, errorBody)
     this.name = 'NotFoundError'
 
     if (Error.captureStackTrace) {

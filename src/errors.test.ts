@@ -100,6 +100,12 @@ describe('Error classes', () => {
       expect(error.statusCode).toBe(404)
       expect(error.name).toBe('NotFoundError')
     })
+
+    it('should use the error body message when present', () => {
+      const mockResponse = new Response(null, {status: 404})
+      const error = new NotFoundError(mockResponse, {id: 'not_found', message: "Couldn't find that attachment."})
+      expect(error.message).toBe("Couldn't find that attachment.")
+    })
   })
 
   describe('RateLimitError', () => {
