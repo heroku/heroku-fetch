@@ -16,8 +16,8 @@ export class HerokuApiError extends Error {
   public response?: Response
   public statusCode: number
 
-  constructor(message: string, statusCode: number, response?: Response, errorBody?: HerokuErrorResponse) {
-    super(message)
+  constructor(fallbackMessage: string, statusCode: number, response?: Response, errorBody?: HerokuErrorResponse) {
+    super(errorBody?.message || fallbackMessage)
     this.name = 'HerokuApiError'
     this.statusCode = statusCode
     this.response = response
