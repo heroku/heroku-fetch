@@ -16,6 +16,7 @@ import type {
 } from '../types.js'
 
 import {debugAuth, debugRequest} from '../debug-loggers.js'
+import {AuthenticationError} from '../errors.js'
 import {
   create2FAAfterHook,
   createBeforeRequestHook,
@@ -190,10 +191,11 @@ export class HerokuApiClient {
     }
 
     // Only these are re-read on each request, so changing them takes effect.
-    // Everything else — hooks, headers, the Accept default, the 2FA handler,
-    // and the base URL derived from service/region — is baked into the cached
-    // ky instance at construction; mutating it here would silently no-op, so
-    // reject it rather than lie about the change landing.
+    // Everything else is fixed after construction — hooks, headers, the Accept
+    // default, the 2FA handler, and the service/region base URL are baked into
+    // the cached ky instance; `reauthorize` is read per request but kept
+    // construction-only as policy. Mutating any of them here would silently
+    // no-op, so reject rather than lie about the change landing.
     if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.options as Record<string, any>)[key] = value
@@ -222,7 +224,7 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return client(path, kyOptions)
+    return this.send(client, path, kyOptions)
   }
 
   /**
@@ -285,6 +287,42 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return client(path, kyOptions)
+    return this.send(client, path, kyOptions)
+  }
+
+  /**
+   * Issue the request through ky. With a `reauthorize` callback configured, a
+   * 401 (thrown as `AuthenticationError` by the error hook) runs the callback
+   * and retries once — the retry re-runs the pipeline, so `beforeRequest`
+   * re-resolves the token. Replaying a non-idempotent write this way is safe:
+   * a 401 is rejected before the server executes the request. The retry sits
+   * outside the `try`, so a second 401 propagates rather than looping; an
+   * already-aborted signal skips the (possibly interactive) refresh entirely.
+   * Without a callback, a plain pass-through.
+   */
+  private async send(client: KyInstance, path: string, kyOptions: KyOptions): Promise<Response> {
+    const {reauthorize} = this.options
+    if (!reauthorize) {
+      return client(path, kyOptions)
+    }
+
+    try {
+      return await client(path, kyOptions)
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        // Don't run the refresh if the caller already aborted; hand the callback
+        // the same combined signal so an interactive refresh can bail too.
+        const signal = kyOptions.signal ?? undefined
+        signal?.throwIfAborted()
+        debugAuth('401 received; invoking reauthorize and retrying once')
+        await reauthorize({signal})
+        // The retry is a fresh request: if the original also cleared a 2FA
+        // challenge, the retried one re-prompts (it drops the one-shot
+        // Heroku-Two-Factor-Code header). Bounded to one extra prompt, not a loop.
+        return client(path, kyOptions)
+      }
+
+      throw error
+    }
   }
 }

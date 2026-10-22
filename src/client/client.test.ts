@@ -616,6 +616,228 @@ describe('HerokuApiClient', () => {
     })
   })
 
+  describe('reauthorize retry (end-to-end)', () => {
+    // A 401 is retried once when a `reauthorize` callback is configured: the
+    // client awaits the callback (the consumer's chance to refresh credentials)
+    // and re-issues the request through the full pipeline, so beforeRequest
+    // re-resolves the token provider and the retry carries the refreshed token.
+    // The server answers 200 only for `Bearer fresh`; anything else is a 401.
+    let server: Server
+    let baseUrl: string
+    let requests: {auth: string | undefined; body: string}[]
+
+    beforeEach(async () => {
+      requests = []
+      server = createServer((request, response) => {
+        const auth = request.headers.authorization
+        const chunks: Buffer[] = []
+        request.on('data', chunk => chunks.push(chunk as Buffer))
+        request.on('end', () => {
+          requests.push({auth, body: Buffer.concat(chunks).toString()})
+          // A dedicated path for the non-401 negative case.
+          if (request.url === '/boom') {
+            response.writeHead(500, {'Content-Type': 'application/json'})
+            response.end(JSON.stringify({id: 'server_error', message: 'Boom.'}))
+            return
+          }
+
+          if (auth === 'Bearer fresh') {
+            response.writeHead(200, {'Content-Type': 'application/json'})
+            response.end(JSON.stringify({ok: true}))
+            return
+          }
+
+          response.writeHead(401, {'Content-Type': 'application/json'})
+          response.end(JSON.stringify({id: 'unauthorized', message: 'Invalid credentials provided.'}))
+        })
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('refreshes credentials and retries once on a 401, then succeeds', async () => {
+      let token = 'stale'
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      const response = await client.get('/account')
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ok: true})
+      expect(reauthorizeCalls).toBe(1)
+      // Two hits: the stale-token 401, then the retry carrying the refreshed
+      // token re-resolved by beforeRequest.
+      expect(requests).toHaveLength(2)
+      expect(requests[0].auth).toBe('Bearer stale')
+      expect(requests[1].auth).toBe('Bearer fresh')
+    })
+
+    it('retries a POST with its JSON body intact', async () => {
+      let token = 'stale'
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      const response = await client.post('/account', {name: 'example'})
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ok: true})
+      expect(requests).toHaveLength(2)
+      expect(JSON.parse(requests[0].body)).toEqual({name: 'example'})
+      expect(JSON.parse(requests[1].body)).toEqual({name: 'example'})
+    })
+
+    it('does not loop when the retry still returns 401', async () => {
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        // The callback never actually produces an accepted token, so the retry
+        // 401s again — it must surface rather than reauthorize a second time.
+        reauthorize() {
+          reauthorizeCalls++
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      await expect(client.get('/account')).rejects.toBeInstanceOf(AuthenticationError)
+      expect(reauthorizeCalls).toBe(1)
+      expect(requests).toHaveLength(2)
+    })
+
+    it('throws AuthenticationError without retrying when no reauthorize is configured', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom', token: 'stale'})
+
+      await expect(client.get('/account')).rejects.toBeInstanceOf(AuthenticationError)
+      expect(requests).toHaveLength(1)
+    })
+
+    it('propagates a rejection from reauthorize in place of the 401', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          throw new Error('login aborted')
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      await expect(client.get('/account')).rejects.toThrow('login aborted')
+      // The callback threw before any retry could go out.
+      expect(requests).toHaveLength(1)
+    })
+
+    it('does not invoke reauthorize on a non-401 error', async () => {
+      // The crux guard: only AuthenticationError (a 401) drives the retry. A
+      // 500 must propagate untouched with the callback never called.
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      await expect(client.get('/boom')).rejects.toMatchObject({statusCode: 500})
+      expect(reauthorizeCalls).toBe(0)
+      expect(requests).toHaveLength(1)
+    })
+
+    it('refreshes and retries a stream on a 401', async () => {
+      // stream() shares send() with request(); confirm the retry seam works on
+      // the other public entry point too.
+      let token = 'stale'
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      const response = await client.stream('/account')
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ok: true})
+      expect(reauthorizeCalls).toBe(1)
+      expect(requests).toHaveLength(2)
+      expect(requests[1].auth).toBe('Bearer fresh')
+    })
+
+    it('awaits an async reauthorize callback before retrying', async () => {
+      // The real consumer (heroku login) is async; exercise `await reauthorize()`
+      // against a genuine promise rather than a sync void.
+      let token = 'stale'
+      const client = new HerokuApiClient({
+        baseUrl,
+        async reauthorize() {
+          await new Promise<void>(resolve => {
+            setTimeout(resolve, 10)
+          })
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      const response = await client.get('/account')
+
+      expect(response.status).toBe(200)
+      expect(requests).toHaveLength(2)
+      expect(requests[1].auth).toBe('Bearer fresh')
+    })
+
+    it('passes the request\'s combined abort signal to the callback', async () => {
+      // A lone client-level signal (no per-call signal) passes through unwrapped,
+      // so the callback receives that exact signal — letting an interactive
+      // refresh bail when the caller aborts.
+      const controller = new AbortController()
+      let received: AbortSignal | undefined
+      let token = 'stale'
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize(context) {
+          received = context.signal
+          token = 'fresh'
+        },
+        service: 'custom',
+        signal: controller.signal,
+        token: () => token,
+      })
+
+      await client.get('/account')
+
+      expect(received).toBe(controller.signal)
+    })
+  })
+
   describe('consumer hooks (options.hooks)', () => {
     // Consumer hooks are merged after the built-ins. beforeRequest hooks see the
     // fully-prepared request; afterResponse hooks run on the resolved response.

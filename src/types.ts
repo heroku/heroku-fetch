@@ -138,6 +138,24 @@ export interface HerokuApiClientOptions {
    * with no built-in way to correlate them beyond the per-response metadata.
    */
   onResponseMetadata?: (metadata: ResponseMetadata) => void;
+  /**
+   * Callback given one chance to refresh credentials when a request fails with a
+   * 401: the client awaits it, then retries the request exactly once, re-resolving
+   * the {@link HerokuApiClientOptions.token} provider so a refreshed token is
+   * picked up. A second 401 propagates; a rejection from the callback propagates
+   * in its place, masking the original 401. The callback fires at most once per
+   * request, and is skipped if the request's signal has already aborted.
+   *
+   * Receives a context carrying the request's combined abort `signal` (the
+   * client-level signal composed with any per-call one), so an interactive
+   * refresh can bail when the caller aborts.
+   *
+   * Policy-free by design: de-duplication, prompting, and any "give up" rule
+   * belong in the callback. The Heroku CLI wires this to `heroku login`, so an
+   * SDK call with an expired or missing token re-prompts and retries. Omitted →
+   * a 401 throws `AuthenticationError` with no retry (unchanged behavior).
+   */
+  reauthorize?: (context: {signal?: AbortSignal}) => Promise<void> | void;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */
@@ -145,21 +163,17 @@ export interface HerokuApiClientOptions {
   /**
    * Default `AbortSignal` applied to every request this client makes: when it
    * fires, all in-flight and subsequent requests abort. Re-read per request, so
-   * it may also be changed later via `setOption('signal', …)`. Composed with
-   * (not replaced by) a per-call {@link RequestOptions.signal} — if both are
-   * supplied, either firing aborts that request — and composed with the
-   * client's `timeout` by the underlying ky layer. Omitted → no
-   * client-level abort.
+   * it may also be set later via `setOption('signal', …)`. Composed (not
+   * replaced) with a per-call {@link RequestOptions.signal} and the client's
+   * `timeout` by the underlying ky layer — either firing aborts the request.
+   * Omitted → no client-level abort.
    *
-   * Long-lived hosts (a server or editor-extension process, as opposed to a
-   * short-lived CLI): a signal that never fires accumulates ~180 bytes per
-   * request on Node ≥ 22 — the ky layer composes it afresh with each request's
-   * timeout, and Node retains the composite in the signal's dependents set
-   * until the source signal aborts or is garbage-collected. It is bounded by
-   * the signal's lifetime and released on abort/GC, so scope this signal (and
-   * the client) to a unit of work, or prefer a per-call
-   * {@link RequestOptions.signal}, rather than wiring a process-lifetime signal
-   * here.
+   * On long-lived hosts (a server or editor-extension process, vs. a short-lived
+   * CLI), a signal that never fires accumulates ~180 bytes/request on Node ≥ 22:
+   * ky composes it afresh with each request's timeout and Node retains the
+   * composite until the source signal aborts or is GC'd. Bounded and released on
+   * abort/GC, so scope this signal (and the client) to a unit of work, or prefer
+   * a per-call {@link RequestOptions.signal}, rather than a process-lifetime one.
    */
   signal?: AbortSignal;
   /** Request timeout in milliseconds */
