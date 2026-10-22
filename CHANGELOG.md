@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.2...heroku-fetch-v0.2.3) (2026-10-22)
+
+
+### Features
+
+* add client-level AbortSignal and reauthorize-on-401 retry to HerokuApiClient ([#89](https://github.com/heroku/heroku-fetch/issues/89)) ([6581c86](https://github.com/heroku/heroku-fetch/commit/6581c8661da868387d445de109d670ffc7b2b00f))
+* add userAgent client option ([#90](https://github.com/heroku/heroku-fetch/issues/90)) ([4d5d38c](https://github.com/heroku/heroku-fetch/commit/4d5d38cde699dd70fc1b0e68f741bff1a409fdb9))
+
 ## [0.2.2](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.1...heroku-fetch-v0.2.2) (2026-10-21)
 
 
