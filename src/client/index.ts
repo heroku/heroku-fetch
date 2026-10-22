@@ -51,6 +51,10 @@ export class HerokuApiClient {
   private kyOptions: KyOptions
   private options: Partial<HerokuApiClientOptions>
     & Required<Pick<HerokuApiClientOptions, 'service' | 'timeout'>>
+  // A single in-flight reauthorize refresh, shared across concurrent 401s so the
+  // callback (e.g. an interactive `heroku login`) fires once rather than once
+  // per request. Null when no refresh is running; cleared when one settles.
+  private reauthorizePromise: null | Promise<void> = null
   // Per-client cross-cutting request state: the Request-Id accumulation and the
   // set of warnings already surfaced, so dedupe spans a multi-request session
   // but resets per client and parallel clients stay isolated.
@@ -266,6 +270,33 @@ export class HerokuApiClient {
   }
 
   /**
+   * Run `reauthorize` at most once across concurrent 401s. The first 401 to
+   * arrive starts the refresh and every other 401 in flight awaits the same
+   * promise instead of each firing the callback — so a stale token shared by N
+   * parallel requests drives one `heroku login`, not N. The shared promise is
+   * cleared once it settles, so a *later* 401 (e.g. the refreshed token has
+   * since expired) starts a fresh refresh rather than reusing a stale result.
+   *
+   * The first caller's `signal` drives the shared refresh; a later waiter's own
+   * signal still aborts its request independently (checked in `send` before and
+   * surfaced by its own `client()` retry), it just can't cancel the in-flight
+   * refresh another request already started.
+   */
+  private reauthorizeOnce(
+    reauthorize: NonNullable<HerokuApiClientOptions['reauthorize']>,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    this.reauthorizePromise ??= (async () => {
+      try {
+        await reauthorize({signal})
+      } finally {
+        this.reauthorizePromise = null
+      }
+    })()
+    return this.reauthorizePromise
+  }
+
+  /**
    * Make a request with full control over options
    */
   private async request(
@@ -338,7 +369,8 @@ export class HerokuApiClient {
         signal?.throwIfAborted()
         debugAuth('401 received; invoking reauthorize and retrying once')
         try {
-          await reauthorize({signal})
+          // Coalesced: concurrent 401s sharing a stale token await one refresh.
+          await this.reauthorizeOnce(reauthorize, signal)
         } catch (reauthorizeError) {
           // The callback's own failure propagates in place of the 401, but keep
           // the original attached as `cause` so consumers don't lose the 401's

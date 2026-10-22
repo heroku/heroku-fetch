@@ -160,11 +160,15 @@ export interface HerokuApiClientOptions {
    * them, so a non-interactive refresh should honor the `signal` or impose its
    * own bound rather than hang.
    *
-   * Policy-free by design: de-duplication, prompting, and any "give up" rule
-   * belong in the callback. Concurrent requests against a stale token each
-   * invoke the callback once (no built-in single-flight) — a consumer wiring an
-   * interactive prompt should coalesce refreshes itself. The Heroku CLI wires
-   * this to `heroku login`, so an SDK call with an expired or missing token
+   * Concurrent 401s are coalesced: when several requests share a stale token,
+   * the first to 401 runs the callback and the rest await that same refresh, so
+   * the client drives one `heroku login` rather than one per request. The shared
+   * refresh is per-client and cleared once it settles, so a later 401 (the
+   * refreshed token has since expired) starts a fresh one. The first 401's
+   * `signal` drives the shared refresh (see {@link HerokuApiClientOptions.signal}
+   * for the waiter-cancellation caveat). Beyond this coalescing the callback is
+   * policy-free: prompting and any "give up" rule belong in it. The Heroku CLI
+   * wires this to `heroku login`, so an SDK call with an expired or missing token
    * re-prompts and retries. A single request can opt out with
    * {@link RequestOptions.reauthorize} `: false` (so its 401 surfaces untouched).
    * Omitted → a 401 throws `AuthenticationError` with no retry (unchanged behavior).
@@ -181,6 +185,13 @@ export interface HerokuApiClientOptions {
    * replaced) with a per-call {@link RequestOptions.signal} and the client's
    * `timeout` by the underlying ky layer — either firing aborts the request.
    * Omitted → no client-level abort.
+   *
+   * Caveat for {@link HerokuApiClientOptions.reauthorize}: a request's signal
+   * aborts *its own* HTTP attempts, but once another request's 401 has started
+   * the shared refresh, this request's signal can't cancel that in-flight
+   * refresh — only the signal of the request that started it can. Aborting a
+   * waiter still abandons its wait (its next `throwIfAborted`/HTTP attempt
+   * rejects); it just doesn't interrupt the refresh already running elsewhere.
    *
    * On long-lived hosts (a server or editor-extension process, vs. a short-lived
    * CLI), a signal that never fires accumulates ~180 bytes/request on Node ≥ 22:

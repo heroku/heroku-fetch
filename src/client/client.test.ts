@@ -923,6 +923,68 @@ describe('HerokuApiClient', () => {
       expect((error as Error).cause).toBeInstanceOf(AuthenticationError)
       expect((error as Error).cause).toMatchObject({statusCode: 401})
     })
+
+    it('coalesces concurrent 401s into a single reauthorize refresh', async () => {
+      // Single-flight: three requests sharing a stale token 401 together, but the
+      // callback (the interactive login) fires once, not once per request. The
+      // refresh is async (as `heroku login` is), so the first 401 starts it and
+      // the other two land during that window and await the same promise.
+      let token = 'stale'
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        async reauthorize() {
+          reauthorizeCalls++
+          await new Promise<void>(resolve => {
+            setTimeout(resolve, 25)
+          })
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      const responses = await Promise.all([
+        client.get('/account'),
+        client.get('/account'),
+        client.get('/account'),
+      ])
+
+      for (const response of responses) {
+        expect(response.status).toBe(200)
+      }
+
+      // One shared refresh, not three.
+      expect(reauthorizeCalls).toBe(1)
+      // Three stale-token 401s, then three retries carrying the refreshed token.
+      expect(requests).toHaveLength(6)
+      expect(requests.slice(0, 3).every(r => r.auth === 'Bearer stale')).toBe(true)
+      expect(requests.slice(3).every(r => r.auth === 'Bearer fresh')).toBe(true)
+    })
+
+    it('starts a fresh refresh for a later 401 once the shared one has settled', async () => {
+      // The coalesced promise is cleared when it settles, so a subsequent 401
+      // (a sequential request, after the first refresh resolved) drives its own
+      // refresh rather than reusing the earlier, now-stale one.
+      let token = 'stale'
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+          token = 'fresh'
+        },
+        service: 'custom',
+        token: () => token,
+      })
+
+      await client.get('/account')
+      // Force the next request to 401 again by reverting to a stale token.
+      token = 'stale'
+      await client.get('/account')
+
+      expect(reauthorizeCalls).toBe(2)
+    })
   })
 
   describe('consumer hooks (options.hooks)', () => {
