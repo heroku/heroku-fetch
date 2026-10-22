@@ -1166,7 +1166,14 @@ describe('HerokuApiClient', () => {
 
       await client.get('/apps')
 
-      expect(received ?? '').not.toContain('heroku-cli')
+      // The client contributed no managed User-Agent: whatever the default fetch
+      // transport sends must carry none of our token's markers — no product
+      // name, no Node.js comment, and crucially no `undefined` (which a broken
+      // guard would emit as `undefined/undefined (…) Node.js/…`).
+      const ua = received ?? ''
+      expect(ua).not.toContain('heroku-cli')
+      expect(ua).not.toContain('Node.js/')
+      expect(ua).not.toContain('undefined')
     })
 
     it('sets no User-Agent when name or version is empty (avoids a malformed token)', async () => {
@@ -1179,7 +1186,13 @@ describe('HerokuApiClient', () => {
 
       await client.get('/apps')
 
-      expect(received ?? '').not.toContain('heroku-cli')
+      // Same guard, exercised through an incomplete option: no partial or
+      // malformed token (`heroku-cli/`, a bare `Node.js/` comment, or `undefined`)
+      // should leak from the empty `version`.
+      const ua = received ?? ''
+      expect(ua).not.toContain('heroku-cli')
+      expect(ua).not.toContain('Node.js/')
+      expect(ua).not.toContain('undefined')
     })
 
     it('lets a per-call User-Agent override the client option (ky merges per-call over instance)', async () => {
