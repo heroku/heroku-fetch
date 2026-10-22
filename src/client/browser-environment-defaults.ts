@@ -20,10 +20,11 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
 }
 
 /**
- * The `User-Agent` comment for browsers: none. Browsers expose no reliable
- * platform/runtime token (and forbid overriding `User-Agent` on `fetch`
- * anyway), so a browser `User-Agent` degrades to the bare `<name>/<version>`.
- * Mirrors the Node `getUserAgentComment()` so the client can call it uniformly.
+ * The `User-Agent` comment (RFC 9110 §5.6.5) for browsers: none. Browsers
+ * expose no reliable platform/runtime token (and forbid overriding `User-Agent`
+ * on `fetch` anyway), so a browser `User-Agent` degrades to the bare
+ * `<name>/<version>`. Mirrors the Node `getUserAgentComment()` so the client
+ * can call it uniformly.
  */
 export function getUserAgentComment(): string {
   return ''

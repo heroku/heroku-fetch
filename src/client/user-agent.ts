@@ -1,13 +1,18 @@
 import type {UserAgentOptions} from '../types.js'
 
 /**
- * Assemble a canonical `User-Agent` string from a product
- * {@link UserAgentOptions} and an environment comment. The comment (a Node
- * platform/runtime token, or empty on a browser — see `getUserAgentComment` in
- * the environment-defaults modules) is appended after the `<name>/<version>`
- * product token when present:
- * `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0`, degrading to the bare
- * `heroku-cli/11.4.0` when the comment is empty.
+ * Assemble a `User-Agent` string in the canonical form defined by RFC 9110
+ * §10.1.5 — a `product` token (`<name>/<version>`) optionally followed by a
+ * `comment` (RFC 9110 §5.6.5) carrying implementation detail. The comment (a
+ * Node platform/runtime token, or empty on a browser — see `getUserAgentComment`
+ * in the environment-defaults modules) is appended after the product token when
+ * present: `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0`, degrading to the
+ * bare `heroku-cli/11.4.0` when the comment is empty.
+ *
+ * Note this canonical `product (comment)` shape differs from the older Heroku
+ * clients (`@heroku-cli/command` emits `heroku-cli/<v> <platform>`, `http-call`
+ * emits `node-<v>`): server-side consumers that pattern-match the legacy string
+ * shape will not match this one.
  */
 export function formatUserAgent(userAgent: UserAgentOptions, comment: string): string {
   const product = `${userAgent.name}/${userAgent.version}`
