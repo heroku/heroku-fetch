@@ -31,6 +31,16 @@ export function getDefaultTokenProvider(): TokenProvider {
 }
 
 /**
+ * The Node-specific `User-Agent` comment appended after the product token:
+ * `(<platform>; <arch>) Node.js/<version>`, e.g. `(darwin; arm64) Node.js/22.21.0`.
+ * The browser build returns an empty string (no process/runtime detail), so a
+ * browser `User-Agent` degrades to the bare `<name>/<version>`.
+ */
+export function getUserAgentComment(): string {
+  return `(${process.platform}; ${process.arch}) Node.js/${process.versions.node}`
+}
+
+/**
  * Get default 2FA handler for Node.js (uses CLI prompts)
  */
 export function getDefaultTwoFactorOptions(): TwoFactorOptions {

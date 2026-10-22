@@ -106,6 +106,20 @@ export interface ServiceConfig {
   region?: string;
 }
 
+/**
+ * Identifies the consumer in the `User-Agent` header: a product `name` and
+ * `version`. The client assembles these into a canonical token — `<name>/<version>`
+ * on a browser, with a platform/runtime comment appended on Node
+ * (`<name>/<version> (<platform>; <arch>) Node.js/<version>`). See
+ * {@link HerokuApiClientOptions.userAgent}.
+ */
+export interface UserAgentOptions {
+  /** Product name, e.g. `heroku-cli`. */
+  name: string;
+  /** Product version, e.g. `11.4.0`. */
+  version: string;
+}
+
 export interface HerokuApiClientOptions {
   /** Custom base URL (for 'custom' service type) */
   baseUrl?: string;
@@ -216,6 +230,18 @@ export interface HerokuApiClientOptions {
   token?: TokenProvider;
   /** Two-factor authentication configuration */
   twoFactor?: TwoFactorOptions;
+  /**
+   * Identifies this client's traffic with a `User-Agent` header, assembled from
+   * a product {@link UserAgentOptions.name} and {@link UserAgentOptions.version}:
+   * `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0` on Node, degrading to
+   * `heroku-cli/11.4.0` on browser builds (no platform/runtime detail is
+   * available there). Applied only when a request doesn't already carry a
+   * `User-Agent`, so a client-level or per-call `headers: {'User-Agent'}` still
+   * wins. Omitted → the client sets no `User-Agent`; the `@heroku/sdk` layer
+   * supplies its own default so SDK-originated traffic stays identifiable even
+   * when a consumer passes none.
+   */
+  userAgent?: UserAgentOptions;
   /**
    * Callback for surfacing user-facing warnings the client raises — currently
    * server `x-heroku-warning` / `warning-message` response headers. Called once

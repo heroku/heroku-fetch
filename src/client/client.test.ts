@@ -1115,6 +1115,87 @@ describe('HerokuApiClient', () => {
       expect(received).toBe('application/vnd.heroku+json; version=3.sdk')
     })
   })
+
+  describe('userAgent option (end-to-end)', () => {
+    // Capture the User-Agent the client actually puts on the wire, so these
+    // exercise the constructor wiring rather than the assembly helper in
+    // isolation.
+    let server: Server
+    let baseUrl: string
+    let received: string | undefined
+
+    beforeEach(async () => {
+      server = createServer((request, response) => {
+        received = request.headers['user-agent']
+        response.writeHead(200, {'Content-Type': 'application/json'})
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      baseUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('sends a canonical User-Agent assembled from name/version plus the Node comment', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        userAgent: {name: 'heroku-cli', version: '11.4.0'},
+      })
+
+      await client.get('/apps')
+
+      // Running under Node, so the platform/runtime comment is present.
+      expect(received).toMatch(/^heroku-cli\/11\.4\.0 \(.+; .+\) Node\.js\/.+$/)
+    })
+
+    it('sets no heroku client User-Agent when the option is omitted', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+      })
+
+      await client.get('/apps')
+
+      expect(received ?? '').not.toContain('heroku-cli')
+    })
+
+    it('lets a per-call User-Agent override the client option (ky merges per-call over instance)', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        userAgent: {name: 'heroku-cli', version: '11.4.0'},
+      })
+
+      await client.get('/apps', {headers: {'User-Agent': 'custom-agent/9.9.9'}})
+
+      expect(received).toBe('custom-agent/9.9.9')
+    })
+
+    it('lets a client-level User-Agent header win over the structured option', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        headers: {'User-Agent': 'custom-agent/1.0.0'},
+        service: 'custom',
+        token: 'test',
+        userAgent: {name: 'heroku-cli', version: '11.4.0'},
+      })
+
+      await client.get('/apps')
+
+      expect(received).toBe('custom-agent/1.0.0')
+    })
+  })
 })
 
 describe('SERVICE_CONFIGS', () => {

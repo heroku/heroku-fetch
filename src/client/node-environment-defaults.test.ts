@@ -4,7 +4,9 @@ import {
   afterEach, beforeEach, describe, expect, it,
 } from 'vitest'
 
-import {getDefaultDispatcher, getDefaultFetch, getDefaultTokenProvider} from './node-environment-defaults.js'
+import {
+  getDefaultDispatcher, getDefaultFetch, getDefaultTokenProvider, getUserAgentComment,
+} from './node-environment-defaults.js'
 
 describe('getDefaultTokenProvider', () => {
   const originalApiKey = process.env.HEROKU_API_KEY
@@ -24,6 +26,12 @@ describe('getDefaultTokenProvider', () => {
     delete process.env.HEROKU_API_KEY
     const provider = getDefaultTokenProvider() as () => string | undefined
     expect(provider()).toBeUndefined()
+  })
+})
+
+describe('getUserAgentComment', () => {
+  it('reports the running platform, arch, and Node version', () => {
+    expect(getUserAgentComment()).toBe(`(${process.platform}; ${process.arch}) Node.js/${process.versions.node}`)
   })
 })
 

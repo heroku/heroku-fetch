@@ -20,6 +20,16 @@ export function getDefaultTwoFactorOptions(): TwoFactorOptions | undefined {
 }
 
 /**
+ * The `User-Agent` comment for browsers: none. Browsers expose no reliable
+ * platform/runtime token (and forbid overriding `User-Agent` on `fetch`
+ * anyway), so a browser `User-Agent` degrades to the bare `<name>/<version>`.
+ * Mirrors the Node `getUserAgentComment()` so the client can call it uniformly.
+ */
+export function getUserAgentComment(): string {
+  return ''
+}
+
+/**
  * Get a default dispatcher for the browser.
  *
  * Always `undefined`. Browsers route through their own proxy stack
