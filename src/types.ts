@@ -138,10 +138,78 @@ export interface HerokuApiClientOptions {
    * with no built-in way to correlate them beyond the per-response metadata.
    */
   onResponseMetadata?: (metadata: ResponseMetadata) => void;
+  /**
+   * Callback given one chance to refresh credentials when a request fails with a
+   * 401: the client awaits it, then retries the request exactly once, re-resolving
+   * the {@link HerokuApiClientOptions.token} provider so a refreshed token is
+   * picked up. A second 401 propagates; a rejection from the callback propagates
+   * in its place (with the original 401 attached as its `cause`). The callback
+   * fires at most once per request, and is skipped if the request's signal has
+   * already aborted.
+   *
+   * The retry only sends a *different* credential if {@link HerokuApiClientOptions.token} is a function
+   * that reads refreshed state (the callback mutates what the provider returns,
+   * as the CLI does by flipping to a fresh token). A static string `token` is
+   * resent unchanged, so the retry 401s again — if you set `reauthorize`, use a
+   * function `token`.
+   *
+   * Receives a context carrying the request's combined abort `signal` (the
+   * client-level signal composed with any per-call one), so an interactive
+   * refresh can bail when the caller aborts. The callback is itself untimed —
+   * ky's `timeout` bounds each HTTP attempt but not the awaited refresh between
+   * them, so a non-interactive refresh should honor the `signal` or impose its
+   * own bound rather than hang.
+   *
+   * Concurrent 401s are coalesced: when several requests share a stale token,
+   * the first to 401 runs the callback and the rest await that same refresh, so
+   * the client drives one `heroku login` rather than one per request. The shared
+   * refresh is per-client and cleared once it settles, so a later 401 (the
+   * refreshed token has since expired) starts a fresh one. The first 401's
+   * `signal` drives the shared refresh (see {@link HerokuApiClientOptions.signal}
+   * for the waiter-cancellation caveat). Beyond this coalescing the callback is
+   * policy-free: prompting and any "give up" rule belong in it. The Heroku CLI
+   * wires this to `heroku login`, so an SDK call with an expired or missing token
+   * re-prompts and retries. A single request can opt out with
+   * {@link RequestOptions.reauthorize} `: false` (so its 401 surfaces untouched).
+   * Omitted → a 401 throws `AuthenticationError` with no retry (unchanged behavior).
+   */
+  reauthorize?: (context: {signal?: AbortSignal}) => Promise<void> | void;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
   /** Heroku service type (platform, data, particleboard, custom) */
   service?: HerokuService;
+  /**
+   * Default `AbortSignal` applied to every request this client makes: when it
+   * fires, all in-flight and subsequent requests abort. Re-read per request, so
+   * it may also be set later via `setOption('signal', …)`. Composed (not
+   * replaced) with a per-call {@link RequestOptions.signal} and the client's
+   * `timeout` by the underlying ky layer — either firing aborts the request.
+   * Omitted → no client-level abort.
+   *
+   * There is no per-request opt-out: this signal is folded into *every* request,
+   * so once it fires, a call issued afterward — including best-effort cleanup
+   * from a SIGINT/abort handler — aborts immediately. Work that must outlive the
+   * abort should run on a separate client that doesn't carry the shared signal
+   * (or you should scope signals to the unit of work rather than wiring one
+   * process-wide signal into a shared, long-lived client).
+   *
+   * Caveat for {@link HerokuApiClientOptions.reauthorize}: a request's signal
+   * aborts *its own* HTTP attempts, but once another request's 401 has started
+   * the shared refresh, this request's signal can't cancel that in-flight
+   * refresh — only the signal of the request that started it can. Aborting a
+   * waiter still abandons its wait (its next `throwIfAborted`/HTTP attempt
+   * rejects); it just doesn't interrupt the refresh already running elsewhere.
+   *
+   * On long-lived hosts (a server or editor-extension process, vs. a short-lived
+   * CLI), a signal that never fires accumulates ~180 bytes/request on Node ≥ 22:
+   * ky composes it afresh with each request's timeout and Node retains the
+   * composite in the source signal's dependents set until that signal aborts or
+   * is GC'd. The retained memory is released on abort/GC, but while the signal
+   * lives it grows linearly with request count (~18 MB over 100k requests). So
+   * scope this signal (and the client) to a unit of work, or prefer a per-call
+   * {@link RequestOptions.signal}, rather than wiring a process-lifetime one.
+   */
+  signal?: AbortSignal;
   /** Request timeout in milliseconds */
   timeout?: number;
   /** Static bearer token or function to retrieve token */
@@ -161,6 +229,15 @@ export interface HerokuApiClientOptions {
 export interface RequestOptions {
   /** Additional headers for this request */
   headers?: Record<string, string>;
+  /**
+   * Opt this request out of the client-level {@link HerokuApiClientOptions.reauthorize}
+   * retry: when `false`, a 401 surfaces as `AuthenticationError` without running
+   * the callback or retrying. The per-request escape hatch mirroring the legacy
+   * `APIClient`'s `retryAuth: false` — for call sites where a 401 means something
+   * other than an expired Heroku credential (e.g. a non-Heroku bearer token) and
+   * must not drive a login. Omitted → the client-level behavior applies.
+   */
+  reauthorize?: false;
   /** Query parameters */
   searchParams?: Record<string, boolean | number | string>;
   /** Aborts the in-flight request when the signal fires. */
