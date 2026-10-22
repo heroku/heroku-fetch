@@ -117,8 +117,9 @@ export class HerokuApiClient {
     // only when the caller hasn't supplied one on the client (a per-call
     // `User-Agent` still wins via ky's per-call-over-instance merge). Omitted or
     // incomplete `userAgent` → no User-Agent is set (resolveUserAgentHeader
-    // returns undefined). The platform/runtime comment is empty on browser
-    // builds, degrading the header to the bare `<name>/<version>`.
+    // returns undefined). Browser builds opt out entirely: getUserAgentComment
+    // returns undefined there (a fetch-set User-Agent isn't CORS-safelisted), so
+    // no managed User-Agent is sent regardless of the option.
     if (!providedHeaders.has('user-agent')) {
       const userAgent = resolveUserAgentHeader(options.userAgent, getUserAgentComment())
       if (userAgent) {

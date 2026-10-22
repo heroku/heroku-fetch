@@ -108,10 +108,11 @@ export interface ServiceConfig {
 
 /**
  * Identifies the consumer in the `User-Agent` header: a product `name` and
- * `version`. The client assembles these into a canonical token — `<name>/<version>`
- * on a browser, with a platform/runtime comment appended on Node
- * (`<name>/<version> (<platform>; <arch>) Node.js/<version>`). See
- * {@link HerokuApiClientOptions.userAgent}.
+ * `version`. On Node the client assembles these into a canonical token with a
+ * platform/runtime comment appended
+ * (`<name>/<version> (<platform>; <arch>) Node.js/<version>`). Ignored on
+ * browser builds (no `User-Agent` is sent — see
+ * {@link HerokuApiClientOptions.userAgent}).
  */
 export interface UserAgentOptions {
   /** Product name, e.g. `heroku-cli`. */
@@ -233,16 +234,19 @@ export interface HerokuApiClientOptions {
   /**
    * Identifies this client's traffic with a `User-Agent` header, assembled from
    * a product {@link UserAgentOptions.name} and {@link UserAgentOptions.version}:
-   * `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0` on Node, degrading to
-   * `heroku-cli/11.4.0` on browser builds — though note a browser forbids
-   * overriding `User-Agent` on `fetch`, so this option is effectively a no-op
-   * there. Applied only when the client's own `headers` don't already carry a
-   * `User-Agent`, so a client-level `headers: {'User-Agent'}` wins; a per-call
-   * `User-Agent` also wins via ky's per-call-over-instance header merge. Both
-   * `name` and `version` must be non-empty, else no `User-Agent` is set.
-   * Omitted → the client sets no `User-Agent`; the `@heroku/sdk` layer supplies
-   * its own default so SDK-originated traffic stays identifiable even when a
-   * consumer passes none.
+   * `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0` on Node. Applied only
+   * when the client's own `headers` don't already carry a `User-Agent`, so a
+   * client-level `headers: {'User-Agent'}` wins; a per-call `User-Agent` also
+   * wins via ky's per-call-over-instance header merge. Both `name` and `version`
+   * must be non-empty, else no `User-Agent` is set. Omitted → the client sets no
+   * `User-Agent`; the `@heroku/sdk` layer supplies its own default so
+   * SDK-originated traffic stays identifiable even when a consumer passes none.
+   *
+   * **Node only.** On browser builds this option is ignored and no `User-Agent`
+   * is sent: a `fetch`-set `User-Agent` is not a CORS-safelisted header, so a
+   * cross-origin request that sets it triggers a preflight and fails entirely if
+   * the server doesn't allow the header (Chromium silently drops it, but Firefox
+   * sends it) — and the browser sends its own `User-Agent` regardless.
    */
   userAgent?: UserAgentOptions;
   /**
