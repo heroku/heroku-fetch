@@ -186,6 +186,13 @@ export interface HerokuApiClientOptions {
    * `timeout` by the underlying ky layer — either firing aborts the request.
    * Omitted → no client-level abort.
    *
+   * There is no per-request opt-out: this signal is folded into *every* request,
+   * so once it fires, a call issued afterward — including best-effort cleanup
+   * from a SIGINT/abort handler — aborts immediately. Work that must outlive the
+   * abort should run on a separate client that doesn't carry the shared signal
+   * (or you should scope signals to the unit of work rather than wiring one
+   * process-wide signal into a shared, long-lived client).
+   *
    * Caveat for {@link HerokuApiClientOptions.reauthorize}: a request's signal
    * aborts *its own* HTTP attempts, but once another request's 401 has started
    * the shared refresh, this request's signal can't cancel that in-flight
