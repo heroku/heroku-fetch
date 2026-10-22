@@ -19,4 +19,5 @@ export type {
   ServiceConfig,
   TokenProvider,
   TwoFactorOptions,
+  UserAgentOptions,
 } from './types.js'

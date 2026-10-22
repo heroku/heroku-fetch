@@ -6,7 +6,9 @@
  * two-factor authentication, and comprehensive error handling.
  */
 
-import {getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions} from '@heroku/heroku-fetch/client/environment-defaults.js'
+import {
+  getDefaultFetch, getDefaultTokenProvider, getDefaultTwoFactorOptions, getUserAgentComment,
+} from '@heroku/heroku-fetch/client/environment-defaults.js'
 import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
@@ -28,6 +30,7 @@ import {
 } from './http-request-hooks.js'
 import {RequestIdStore} from './request-id.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
+import {resolveUserAgentHeader} from './user-agent.js'
 
 /**
  * Combine zero or more optional abort signals into one. Returns `undefined`
@@ -101,12 +104,27 @@ export class HerokuApiClient {
     // and no override contribute no Accept at all.
     const defaultAccept = options.defaultAccept ?? serviceConfig.defaultAccept
     const headers: Record<string, string> = {...options.headers}
-    // Case-insensitive check: a consumer may have supplied Accept under any
+    // Case-insensitive check: a consumer may have supplied a header under any
     // casing, and ky merges headers case-insensitively (last write wins), so a
     // plain `'Accept' in headers` test would miss a lowercase `accept` and let
     // our default clobber the consumer's choice.
-    if (defaultAccept && !new Headers(options.headers).has('accept')) {
+    const providedHeaders = new Headers(options.headers)
+    if (defaultAccept && !providedHeaders.has('accept')) {
       headers.Accept = defaultAccept
+    }
+
+    // Self-identifying User-Agent, same fill-if-absent rule as Accept: set it
+    // only when the caller hasn't supplied one on the client (a per-call
+    // `User-Agent` still wins via ky's per-call-over-instance merge). Omitted or
+    // incomplete `userAgent` → no User-Agent is set (resolveUserAgentHeader
+    // returns undefined). Browser builds opt out entirely: getUserAgentComment
+    // returns undefined there (a fetch-set User-Agent isn't CORS-safelisted), so
+    // no managed User-Agent is sent regardless of the option.
+    if (!providedHeaders.has('user-agent')) {
+      const userAgent = resolveUserAgentHeader(options.userAgent, getUserAgentComment())
+      if (userAgent) {
+        headers['User-Agent'] = userAgent
+      }
     }
 
     this.kyOptions = {

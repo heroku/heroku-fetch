@@ -31,6 +31,17 @@ export function getDefaultTokenProvider(): TokenProvider {
 }
 
 /**
+ * The Node-specific `User-Agent` comment (RFC 9110 §5.6.5) appended after the
+ * product token: `(<platform>; <arch>) Node.js/<version>`, e.g.
+ * `(darwin; arm64) Node.js/22.21.0`. The browser build returns `undefined`
+ * instead, opting out of a client-managed `User-Agent` entirely (a `fetch`-set
+ * `User-Agent` isn't CORS-safelisted); see the browser `getUserAgentComment`.
+ */
+export function getUserAgentComment(): string | undefined {
+  return `(${process.platform}; ${process.arch}) Node.js/${process.versions.node}`
+}
+
+/**
  * Get default 2FA handler for Node.js (uses CLI prompts)
  */
 export function getDefaultTwoFactorOptions(): TwoFactorOptions {
