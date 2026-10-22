@@ -148,8 +148,18 @@ export interface HerokuApiClientOptions {
    * it may also be changed later via `setOption('signal', …)`. Composed with
    * (not replaced by) a per-call {@link RequestOptions.signal} — if both are
    * supplied, either firing aborts that request — and composed with the
-   * client's `timeout` by the underlying fetch layer. Omitted → no
+   * client's `timeout` by the underlying ky layer. Omitted → no
    * client-level abort.
+   *
+   * Long-lived hosts (a server or editor-extension process, as opposed to a
+   * short-lived CLI): a signal that never fires accumulates ~180 bytes per
+   * request on Node ≥ 22 — the ky layer composes it afresh with each request's
+   * timeout, and Node retains the composite in the signal's dependents set
+   * until the source signal aborts or is garbage-collected. It is bounded by
+   * the signal's lifetime and released on abort/GC, so scope this signal (and
+   * the client) to a unit of work, or prefer a per-call
+   * {@link RequestOptions.signal}, rather than wiring a process-lifetime signal
+   * here.
    */
   signal?: AbortSignal;
   /** Request timeout in milliseconds */
