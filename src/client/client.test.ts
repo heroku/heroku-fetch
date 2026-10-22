@@ -1169,6 +1169,19 @@ describe('HerokuApiClient', () => {
       expect(received ?? '').not.toContain('heroku-cli')
     })
 
+    it('sets no User-Agent when name or version is empty (avoids a malformed token)', async () => {
+      const client = new HerokuApiClient({
+        baseUrl,
+        service: 'custom',
+        token: 'test',
+        userAgent: {name: 'heroku-cli', version: ''},
+      })
+
+      await client.get('/apps')
+
+      expect(received ?? '').not.toContain('heroku-cli')
+    })
+
     it('lets a per-call User-Agent override the client option (ky merges per-call over instance)', async () => {
       const client = new HerokuApiClient({
         baseUrl,

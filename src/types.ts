@@ -234,12 +234,15 @@ export interface HerokuApiClientOptions {
    * Identifies this client's traffic with a `User-Agent` header, assembled from
    * a product {@link UserAgentOptions.name} and {@link UserAgentOptions.version}:
    * `heroku-cli/11.4.0 (darwin; arm64) Node.js/22.21.0` on Node, degrading to
-   * `heroku-cli/11.4.0` on browser builds (no platform/runtime detail is
-   * available there). Applied only when a request doesn't already carry a
-   * `User-Agent`, so a client-level or per-call `headers: {'User-Agent'}` still
-   * wins. Omitted → the client sets no `User-Agent`; the `@heroku/sdk` layer
-   * supplies its own default so SDK-originated traffic stays identifiable even
-   * when a consumer passes none.
+   * `heroku-cli/11.4.0` on browser builds — though note a browser forbids
+   * overriding `User-Agent` on `fetch`, so this option is effectively a no-op
+   * there. Applied only when the client's own `headers` don't already carry a
+   * `User-Agent`, so a client-level `headers: {'User-Agent'}` wins; a per-call
+   * `User-Agent` also wins via ky's per-call-over-instance header merge. Both
+   * `name` and `version` must be non-empty, else no `User-Agent` is set.
+   * Omitted → the client sets no `User-Agent`; the `@heroku/sdk` layer supplies
+   * its own default so SDK-originated traffic stays identifiable even when a
+   * consumer passes none.
    */
   userAgent?: UserAgentOptions;
   /**

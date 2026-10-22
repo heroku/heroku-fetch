@@ -30,7 +30,7 @@ import {
 } from './http-request-hooks.js'
 import {RequestIdStore} from './request-id.js'
 import {SERVICE_CONFIGS} from './service-configurations.js'
-import {formatUserAgent} from './user-agent.js'
+import {resolveUserAgentHeader} from './user-agent.js'
 
 /**
  * Combine zero or more optional abort signals into one. Returns `undefined`
@@ -115,11 +115,15 @@ export class HerokuApiClient {
 
     // Self-identifying User-Agent, same fill-if-absent rule as Accept: set it
     // only when the caller hasn't supplied one on the client (a per-call
-    // `User-Agent` still wins via ky's per-call-over-instance merge). Omitted
-    // `userAgent` → no User-Agent is set. The platform/runtime comment is empty
-    // on browser builds, degrading the header to the bare `<name>/<version>`.
-    if (options.userAgent && !providedHeaders.has('user-agent')) {
-      headers['User-Agent'] = formatUserAgent(options.userAgent, getUserAgentComment())
+    // `User-Agent` still wins via ky's per-call-over-instance merge). Omitted or
+    // incomplete `userAgent` → no User-Agent is set (resolveUserAgentHeader
+    // returns undefined). The platform/runtime comment is empty on browser
+    // builds, degrading the header to the bare `<name>/<version>`.
+    if (!providedHeaders.has('user-agent')) {
+      const userAgent = resolveUserAgentHeader(options.userAgent, getUserAgentComment())
+      if (userAgent) {
+        headers['User-Agent'] = userAgent
+      }
     }
 
     this.kyOptions = {
