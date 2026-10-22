@@ -143,17 +143,31 @@ export interface HerokuApiClientOptions {
    * 401: the client awaits it, then retries the request exactly once, re-resolving
    * the {@link HerokuApiClientOptions.token} provider so a refreshed token is
    * picked up. A second 401 propagates; a rejection from the callback propagates
-   * in its place, masking the original 401. The callback fires at most once per
-   * request, and is skipped if the request's signal has already aborted.
+   * in its place (with the original 401 attached as its `cause`). The callback
+   * fires at most once per request, and is skipped if the request's signal has
+   * already aborted.
+   *
+   * The retry only sends a *different* credential if {@link HerokuApiClientOptions.token} is a function
+   * that reads refreshed state (the callback mutates what the provider returns,
+   * as the CLI does by flipping to a fresh token). A static string `token` is
+   * resent unchanged, so the retry 401s again — if you set `reauthorize`, use a
+   * function `token`.
    *
    * Receives a context carrying the request's combined abort `signal` (the
    * client-level signal composed with any per-call one), so an interactive
-   * refresh can bail when the caller aborts.
+   * refresh can bail when the caller aborts. The callback is itself untimed —
+   * ky's `timeout` bounds each HTTP attempt but not the awaited refresh between
+   * them, so a non-interactive refresh should honor the `signal` or impose its
+   * own bound rather than hang.
    *
    * Policy-free by design: de-duplication, prompting, and any "give up" rule
-   * belong in the callback. The Heroku CLI wires this to `heroku login`, so an
-   * SDK call with an expired or missing token re-prompts and retries. Omitted →
-   * a 401 throws `AuthenticationError` with no retry (unchanged behavior).
+   * belong in the callback. Concurrent requests against a stale token each
+   * invoke the callback once (no built-in single-flight) — a consumer wiring an
+   * interactive prompt should coalesce refreshes itself. The Heroku CLI wires
+   * this to `heroku login`, so an SDK call with an expired or missing token
+   * re-prompts and retries. A single request can opt out with
+   * {@link RequestOptions.reauthorize} `: false` (so its 401 surfaces untouched).
+   * Omitted → a 401 throws `AuthenticationError` with no retry (unchanged behavior).
    */
   reauthorize?: (context: {signal?: AbortSignal}) => Promise<void> | void;
   /** Service region (e.g., 'eu', 'us') */
@@ -171,9 +185,11 @@ export interface HerokuApiClientOptions {
    * On long-lived hosts (a server or editor-extension process, vs. a short-lived
    * CLI), a signal that never fires accumulates ~180 bytes/request on Node ≥ 22:
    * ky composes it afresh with each request's timeout and Node retains the
-   * composite until the source signal aborts or is GC'd. Bounded and released on
-   * abort/GC, so scope this signal (and the client) to a unit of work, or prefer
-   * a per-call {@link RequestOptions.signal}, rather than a process-lifetime one.
+   * composite in the source signal's dependents set until that signal aborts or
+   * is GC'd. The retained memory is released on abort/GC, but while the signal
+   * lives it grows linearly with request count (~18 MB over 100k requests). So
+   * scope this signal (and the client) to a unit of work, or prefer a per-call
+   * {@link RequestOptions.signal}, rather than wiring a process-lifetime one.
    */
   signal?: AbortSignal;
   /** Request timeout in milliseconds */
@@ -195,6 +211,15 @@ export interface HerokuApiClientOptions {
 export interface RequestOptions {
   /** Additional headers for this request */
   headers?: Record<string, string>;
+  /**
+   * Opt this request out of the client-level {@link HerokuApiClientOptions.reauthorize}
+   * retry: when `false`, a 401 surfaces as `AuthenticationError` without running
+   * the callback or retrying. The per-request escape hatch mirroring the legacy
+   * `APIClient`'s `retryAuth: false` — for call sites where a 401 means something
+   * other than an expired Heroku credential (e.g. a non-Heroku bearer token) and
+   * must not drive a login. Omitted → the client-level behavior applies.
+   */
+  reauthorize?: false;
   /** Query parameters */
   searchParams?: Record<string, boolean | number | string>;
   /** Aborts the in-flight request when the signal fires. */

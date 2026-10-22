@@ -191,11 +191,13 @@ export class HerokuApiClient {
     }
 
     // Only these are re-read on each request, so changing them takes effect.
-    // Everything else is fixed after construction — hooks, headers, the Accept
-    // default, the 2FA handler, and the service/region base URL are baked into
-    // the cached ky instance; `reauthorize` is read per request but kept
-    // construction-only as policy. Mutating any of them here would silently
-    // no-op, so reject rather than lie about the change landing.
+    // hooks, headers, the Accept default, the 2FA handler, and the
+    // service/region base URL are baked into the cached ky instance at
+    // construction, so mutating them here would silently no-op — reject rather
+    // than lie about the change landing. `reauthorize` IS read per request (so a
+    // mutation would land), but is deliberately kept construction-only: it's an
+    // auth policy that should be fixed for the client, with per-request control
+    // exposed instead through `RequestOptions.reauthorize: false`.
     if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.options as Record<string, any>)[key] = value
@@ -224,7 +226,7 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return this.send(client, path, kyOptions)
+    return this.send(client, path, kyOptions, this.resolveReauthorize(options?.reauthorize))
   }
 
   /**
@@ -287,21 +289,41 @@ export class HerokuApiClient {
     }
 
     const client = await this.getClient()
-    return this.send(client, path, kyOptions)
+    return this.send(client, path, kyOptions, this.resolveReauthorize(options?.reauthorize))
   }
 
   /**
-   * Issue the request through ky. With a `reauthorize` callback configured, a
+   * The `reauthorize` callback to apply for a request: the client-level one,
+   * unless the request opts out with `reauthorize: false` (the per-request
+   * escape hatch mirroring the legacy `APIClient`'s `retryAuth: false`, for
+   * call sites where a 401 must surface rather than drive a login).
+   */
+  private resolveReauthorize(optOut?: false): HerokuApiClientOptions['reauthorize'] {
+    return optOut === false ? undefined : this.options.reauthorize
+  }
+
+  /**
+   * Issue the request through ky. With an effective `reauthorize` callback, a
    * 401 (thrown as `AuthenticationError` by the error hook) runs the callback
    * and retries once — the retry re-runs the pipeline, so `beforeRequest`
-   * re-resolves the token. Replaying a non-idempotent write this way is safe:
-   * a 401 is rejected before the server executes the request. The retry sits
-   * outside the `try`, so a second 401 propagates rather than looping; an
-   * already-aborted signal skips the (possibly interactive) refresh entirely.
-   * Without a callback, a plain pass-through.
+   * re-resolves the token. The retry sits outside the `try`, so a second 401
+   * propagates rather than looping; an already-aborted signal skips the
+   * (possibly interactive) refresh entirely. Without a callback (none configured,
+   * or the request opted out via `RequestOptions.reauthorize: false`), a plain
+   * pass-through.
+   *
+   * Replaying a non-idempotent write this way is safe for Heroku's front-door
+   * auth, which rejects a 401 before the server executes the request. It is not
+   * universally safe: a `data`/`particleboard`/`custom` host that returns a
+   * downstream or proxied 401 *after* side effects have begun would see the
+   * write run twice. Opt such a request out with `reauthorize: false`.
    */
-  private async send(client: KyInstance, path: string, kyOptions: KyOptions): Promise<Response> {
-    const {reauthorize} = this.options
+  private async send(
+    client: KyInstance,
+    path: string,
+    kyOptions: KyOptions,
+    reauthorize: HerokuApiClientOptions['reauthorize'],
+  ): Promise<Response> {
     if (!reauthorize) {
       return client(path, kyOptions)
     }
@@ -315,7 +337,23 @@ export class HerokuApiClient {
         const signal = kyOptions.signal ?? undefined
         signal?.throwIfAborted()
         debugAuth('401 received; invoking reauthorize and retrying once')
-        await reauthorize({signal})
+        try {
+          await reauthorize({signal})
+        } catch (reauthorizeError) {
+          // The callback's own failure propagates in place of the 401, but keep
+          // the original attached as `cause` so consumers don't lose the 401's
+          // statusCode/id/request context (and an `instanceof AuthenticationError`
+          // check on the cause chain still works). Only set it when the callback
+          // didn't already supply a cause of its own. (Cast for `cause`: the
+          // package targets the ES2020 lib, where it isn't yet on `Error`.)
+          const withCause = reauthorizeError as {cause?: unknown}
+          if (reauthorizeError instanceof Error && withCause.cause === undefined) {
+            withCause.cause = error
+          }
+
+          throw reauthorizeError
+        }
+
         // The retry is a fresh request: if the original also cleared a 2FA
         // challenge, the retried one re-prompts (it drops the one-shot
         // Heroku-Two-Factor-Code header). Bounded to one extra prompt, not a loop.

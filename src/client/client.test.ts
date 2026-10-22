@@ -89,14 +89,13 @@ describe('HerokuApiClient', () => {
       // Timeout is updated internally
     })
 
-    it('accepts the live-mutable warn and onResponseMetadata callbacks', () => {
+    it('accepts the live-mutable warn, onResponseMetadata, and signal options', () => {
+      // All three are re-read per request, so setOption takes effect rather than
+      // throwing. The signal's effect is covered more strongly by the abort test
+      // in 'AbortSignal forwarding'.
       const client = new HerokuApiClient()
       expect(() => client.setOption('warn', () => {})).not.toThrow()
       expect(() => client.setOption('onResponseMetadata', () => {})).not.toThrow()
-    })
-
-    it('accepts a live-mutable signal (re-read on each request)', () => {
-      const client = new HerokuApiClient()
       expect(() => client.setOption('signal', new AbortController().signal)).not.toThrow()
     })
 
@@ -835,6 +834,94 @@ describe('HerokuApiClient', () => {
       await client.get('/account')
 
       expect(received).toBe(controller.signal)
+    })
+
+    it('hands the callback the composite signal when a per-call signal is also set', async () => {
+      // Client-level + per-call signals compose into one AbortSignal.any: the
+      // callback receives the composite (neither source directly), and aborting
+      // either source aborts it — so an interactive refresh still bails.
+      const clientController = new AbortController()
+      const callController = new AbortController()
+      let received: AbortSignal | undefined
+      let token = 'stale'
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize(context) {
+          received = context.signal
+          token = 'fresh'
+        },
+        service: 'custom',
+        signal: clientController.signal,
+        token: () => token,
+      })
+
+      await client.get('/account', {signal: callController.signal})
+
+      expect(received).toBeDefined()
+      expect(received).not.toBe(clientController.signal)
+      expect(received).not.toBe(callController.signal)
+      // The composite tracks either source: aborting the per-call one aborts it.
+      expect(received!.aborted).toBe(false)
+      callController.abort()
+      expect(received!.aborted).toBe(true)
+    })
+
+    it('skips the callback and does not retry when the signal has already aborted', async () => {
+      // Documented guarantee: an already-aborted request never drives a refresh.
+      // fetch rejects the aborted request before it reaches the 401 path, so the
+      // callback never fires and nothing is sent.
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      await expect(client.get('/account', {signal: AbortSignal.abort()})).rejects.toThrow()
+      expect(reauthorizeCalls).toBe(0)
+      expect(requests).toHaveLength(0)
+    })
+
+    it('does not run the callback or retry when a request opts out with reauthorize: false', async () => {
+      // Per-request escape hatch (legacy `retryAuth: false`): a 401 surfaces
+      // untouched even though the client has a reauthorize callback configured.
+      let reauthorizeCalls = 0
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          reauthorizeCalls++
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      await expect(client.get('/account', {reauthorize: false})).rejects.toBeInstanceOf(AuthenticationError)
+      expect(reauthorizeCalls).toBe(0)
+      expect(requests).toHaveLength(1)
+    })
+
+    it('attaches the original 401 as the cause of a reauthorize rejection', async () => {
+      // The callback's failure propagates, but the 401 is preserved on `cause`
+      // so consumers keep its statusCode/id and an AuthenticationError check on
+      // the cause chain still works.
+      const client = new HerokuApiClient({
+        baseUrl,
+        reauthorize() {
+          throw new Error('login aborted')
+        },
+        service: 'custom',
+        token: 'stale',
+      })
+
+      const error = await client.get('/account').catch((error_: unknown) => error_)
+
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe('login aborted')
+      expect((error as Error).cause).toBeInstanceOf(AuthenticationError)
+      expect((error as Error).cause).toMatchObject({statusCode: 401})
     })
   })
 
