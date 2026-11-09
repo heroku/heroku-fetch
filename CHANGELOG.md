@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.4...heroku-fetch-v0.2.5) (2026-11-09)
+
+
+### Dependencies
+
+* bump undici from 8.12.2 to 8.12.3 ([#98](https://github.com/heroku/heroku-fetch/issues/98)) ([b8d7ce6](https://github.com/heroku/heroku-fetch/commit/b8d7ce6b2fe91b6fe53aaad73c2111e552d8a011))
+
 ## [0.2.4](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.3...heroku-fetch-v0.2.4) (2026-10-29)
 
 
