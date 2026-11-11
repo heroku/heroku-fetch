@@ -1331,6 +1331,16 @@ describe('SERVICE_CONFIGS', () => {
 
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
     })
+
+    it.each(['HTTPS://data.example.com', 'Https://data.example.com', 'HTTP://data.example.com'])(
+      'keeps an uppercase or mixed-case scheme: %s',
+      value => {
+        vi.stubEnv('HEROKU_DATA_HOST', value)
+
+        expect(SERVICE_CONFIGS.data.baseUrl).toBe(value)
+        expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.example.com')
+      },
+    )
   })
 
   it('should have particleboard config', () => {
