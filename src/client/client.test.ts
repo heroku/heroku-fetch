@@ -1,7 +1,7 @@
 import {createServer, type Server} from 'node:http'
 import {type AddressInfo} from 'node:net'
 import {
-  afterEach, beforeEach, describe, expect, it,
+  afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest'
 
 import type {ResponseMetadata} from '../types.js'
@@ -284,6 +284,62 @@ describe('HerokuApiClient', () => {
         name: 'AuthenticationError',
         statusCode: 401,
       })
+    })
+  })
+
+  describe('data host environment variables (end-to-end)', () => {
+    let server: Server
+    let serverUrl: string
+    let receivedPath: string | undefined
+
+    beforeEach(async () => {
+      vi.stubEnv('HEROKU_DATA_HOST', '')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', '')
+      receivedPath = undefined
+      server = createServer((request, response) => {
+        receivedPath = request.url
+        response.writeHead(200, {'Content-Type': 'application/json'})
+        response.end('{}')
+      })
+      await new Promise<void>(resolve => {
+        server.listen(0, '127.0.0.1', resolve)
+      })
+      const {port} = server.address() as AddressInfo
+      serverUrl = `http://127.0.0.1:${port}`
+    })
+
+    afterEach(async () => {
+      vi.unstubAllEnvs()
+      await new Promise<void>(resolve => {
+        server.close(() => resolve())
+      })
+    })
+
+    it('sends data requests to HEROKU_DATA_HOST', async () => {
+      vi.stubEnv('HEROKU_DATA_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'data', token: 'test-token'})
+
+      await client.get('/postgres/v0/databases/db-1/config')
+
+      expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('sends data requests to HEROKU_POSTGRESQL_HOST when HEROKU_DATA_HOST is unset', async () => {
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'data', token: 'test-token'})
+
+      await client.get('/postgres/v0/databases/db-1/config')
+
+      expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('lets an explicit baseUrl win over the variables', async () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'data.invalid')
+      const client = new HerokuApiClient({baseUrl: serverUrl, service: 'data', token: 'test-token'})
+
+      await client.get('/postgres/v0/databases/db-1/config')
+
+      expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
     })
   })
 
@@ -1234,11 +1290,57 @@ describe('SERVICE_CONFIGS', () => {
     })
   })
 
-  it('should have data config', () => {
-    expect(SERVICE_CONFIGS.data).toEqual({
-      baseUrl: 'https://postgres-api.heroku.com',
-      defaultAccept: HEROKU_V3_ACCEPT,
+  describe('data config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_DATA_HOST', '')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', '')
     })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('defaults to the public data API', () => {
+      expect(SERVICE_CONFIGS.data).toEqual({
+        baseUrl: 'https://postgres-api.heroku.com',
+        defaultAccept: HEROKU_V3_ACCEPT,
+      })
+    })
+
+    it('uses HEROKU_DATA_HOST as an https host', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+    })
+
+    it('uses HEROKU_POSTGRESQL_HOST when HEROKU_DATA_HOST is unset', () => {
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+    })
+
+    it('prefers HEROKU_DATA_HOST over HEROKU_POSTGRESQL_HOST', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+    })
+
+    it('keeps a scheme given in the variable', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://localhost:5000')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
+    })
+
+    it.each(['HTTPS://data.example.com', 'Https://data.example.com', 'HTTP://data.example.com'])(
+      'keeps an uppercase or mixed-case scheme: %s',
+      value => {
+        vi.stubEnv('HEROKU_DATA_HOST', value)
+
+        expect(SERVICE_CONFIGS.data.baseUrl).toBe(value)
+        expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.example.com')
+      },
+    )
   })
 
   it('should have particleboard config', () => {
