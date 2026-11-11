@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.5...heroku-fetch-v0.2.6) (2026-11-11)
+
+
+### Features
+
+* honor HEROKU_DATA_HOST and HEROKU_POSTGRESQL_HOST for the data service ([#101](https://github.com/heroku/heroku-fetch/issues/101)) ([ccfcc2e](https://github.com/heroku/heroku-fetch/commit/ccfcc2ebde0c637fb15de8009c2ae995292218b9))
+
 ## [0.2.5](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.4...heroku-fetch-v0.2.5) (2026-11-09)
 
 
