@@ -17,7 +17,7 @@ function toBaseUrl(host: string): string {
  * then `https://postgres-api.heroku.com`. These are the variables the Heroku
  * CLI has long honored for the data API.
  */
-function databaseUrl(): string {
+function dataBaseUrl(): string {
   const host = readEnv('HEROKU_DATA_HOST') || readEnv('HEROKU_POSTGRESQL_HOST')
   return host ? toBaseUrl(host) : 'https://postgres-api.heroku.com'
 }
@@ -38,7 +38,7 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   data: {
     // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
-      return databaseUrl()
+      return dataBaseUrl()
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
