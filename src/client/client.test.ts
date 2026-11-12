@@ -1362,7 +1362,7 @@ describe('SERVICE_CONFIGS', () => {
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
     })
 
-    it.each(['HTTPS://data.example.com', 'Https://data.example.com', 'HTTP://data.example.com'])(
+    it.each(['HTTPS://data.example.com', 'Https://data.example.com'])(
       'keeps an uppercase or mixed-case scheme: %s',
       value => {
         vi.stubEnv('HEROKU_DATA_HOST', value)
@@ -1472,6 +1472,54 @@ describe('SERVICE_CONFIGS', () => {
       vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
 
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+    })
+
+    it.each(['http://localhost:5000', 'http://127.0.0.1:5000', 'http://[::1]:5000', 'HTTP://LOCALHOST'])(
+      'allows plain http for a loopback host: %s',
+      value => {
+        vi.stubEnv('HEROKU_METRICS_HOST', value)
+
+        expect(SERVICE_CONFIGS.metrics.baseUrl).toBe(value)
+      },
+    )
+
+    it.each([
+      'http://metrics.example.com',
+      'HTTP://metrics.example.com',
+      'http://localhost.example.com',
+      'http://127.0.0.1.example.com',
+      'http://user:secret@metrics.example.com',
+    ])('rejects plain http for a remote host: %s', value => {
+      vi.stubEnv('HEROKU_METRICS_HOST', value)
+
+      expect(() => SERVICE_CONFIGS.metrics.baseUrl).toThrow('HEROKU_METRICS_HOST must use https:// unless it points at localhost')
+    })
+
+    it('does not echo the rejected value in the error', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'http://user:secret@metrics.example.com')
+
+      expect(() => SERVICE_CONFIGS.metrics.baseUrl).toThrow(expect.objectContaining({
+        message: expect.not.stringContaining('secret'),
+      }))
+    })
+
+    it('rejects plain http before falling through to the next variable', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(() => SERVICE_CONFIGS.data.baseUrl).toThrow('HEROKU_DATA_HOST must use https://')
+    })
+
+    it('rejects plain http when a client is built', () => {
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+
+      expect(() => new HerokuApiClient({service: 'notifications', token: 'test-token'})).toThrow('HEROKU_NOTIFICATIONS_HOST must use https://')
+    })
+
+    it('leaves an explicit http baseUrl alone', () => {
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+
+      expect(() => new HerokuApiClient({baseUrl: 'http://telex.example.com', service: 'notifications', token: 'test-token'})).not.toThrow()
     })
 
     it.each(['data', 'metrics', 'notifications', 'particleboard', 'repositories'] as const)(

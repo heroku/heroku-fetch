@@ -65,6 +65,10 @@ const euDataClient = new HerokuApiClient({
 // The data client's host comes from HEROKU_DATA_HOST, then
 // HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
 // gets https://. An explicit baseUrl or region takes precedence.
+//
+// This applies to every service host variable below: a plain http:// value
+// is accepted only for localhost, 127.0.0.1 or [::1]. Any other http:// host
+// throws when the client is built, so the token is never sent unencrypted.
 
 // Metrics. The host comes from HEROKU_METRICS_HOST, then
 // api.metrics.heroku.com. An explicit baseUrl takes precedence.

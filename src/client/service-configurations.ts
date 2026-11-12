@@ -2,20 +2,40 @@ import type {HerokuService, ServiceConfig} from '../types.js'
 
 const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
 
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '[::1]', 'localhost'])
+
 /**
  * The base URL from the first of `variables` that is set, else `fallback`.
  * Values are trimmed, and blank ones are skipped. A bare hostname gets `https://`;
  * a value with an `http://` or `https://` scheme, in any case, is used as-is.
  * `process` and `process.env` are guarded for browser builds.
+ *
+ * Plain `http://` is allowed only for loopback hosts (local development), so the
+ * client's bearer token is never sent unencrypted to a remote host. Otherwise it
+ * throws, naming the variable but not echoing its value.
  */
 function envBaseUrl(variables: string[], fallback: string): string {
   const env = typeof process === 'undefined' ? undefined : process.env
   for (const variable of variables) {
     const host = env?.[variable]?.trim()
-    if (host) return /^https?:\/\//i.test(host) ? host : `https://${host}`
+    if (!host) continue
+    if (!/^https?:\/\//i.test(host)) return `https://${host}`
+    if (/^http:/i.test(host) && !isLoopback(host)) {
+      throw new Error(`${variable} must use https:// unless it points at localhost`)
+    }
+
+    return host
   }
 
   return fallback
+}
+
+function isLoopback(url: string): boolean {
+  try {
+    return LOOPBACK_HOSTNAMES.has(new URL(url).hostname)
+  } catch {
+    return false
+  }
 }
 
 /**
