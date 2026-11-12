@@ -28,12 +28,30 @@ function metricsBaseUrl(): string {
   return host ? toBaseUrl(host) : 'https://api.metrics.heroku.com'
 }
 
+/** The notifications (telex) base URL: `HEROKU_NOTIFICATIONS_HOST`, then `https://telex.heroku.com`. */
+function notificationsBaseUrl(): string {
+  const host = readEnv('HEROKU_NOTIFICATIONS_HOST')
+  return host ? toBaseUrl(host) : 'https://telex.heroku.com'
+}
+
 /** The particleboard base URL: `HEROKU_PARTICLEBOARD_URL`, then `https://particleboard.heroku.com`. */
 function particleboardBaseUrl(): string {
   const host = readEnv('HEROKU_PARTICLEBOARD_URL')
   return host ? toBaseUrl(host) : 'https://particleboard.heroku.com'
 }
 
+/** The repositories (kolkrabbi) base URL: `HEROKU_REPOSITORIES_HOST`, then `https://kolkrabbi.heroku.com`. */
+function repositoriesBaseUrl(): string {
+  const host = readEnv('HEROKU_REPOSITORIES_HOST')
+  return host ? toBaseUrl(host) : 'https://kolkrabbi.heroku.com'
+}
+
+/**
+ * Per-service defaults. Services whose host can be overridden by an environment
+ * variable use a `baseUrl` getter, so the variable is read when each client is
+ * built, not at import. `notifications` and `repositories` set no Accept default,
+ * matching what those hosts have always been sent.
+ */
 export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   custom: {
     // Must be provided by user; no Accept default — the URL may be
@@ -42,21 +60,23 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
     baseUrl: '',
   },
   data: {
-    // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
       return dataBaseUrl()
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
   metrics: {
-    // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
       return metricsBaseUrl()
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
+  notifications: {
+    get baseUrl() {
+      return notificationsBaseUrl()
+    },
+  },
   particleboard: {
-    // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
       return particleboardBaseUrl()
     },
@@ -65,5 +85,10 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   platform: {
     baseUrl: 'https://api.heroku.com',
     defaultAccept: HEROKU_V3_ACCEPT,
+  },
+  repositories: {
+    get baseUrl() {
+      return repositoriesBaseUrl()
+    },
   },
 }

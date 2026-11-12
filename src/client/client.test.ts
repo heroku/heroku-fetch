@@ -351,6 +351,18 @@ describe('HerokuApiClient', () => {
       expect(receivedPath).toBe('/metrics/my-app/router/latency')
     })
 
+    it.each([
+      ['notifications', 'HEROKU_NOTIFICATIONS_HOST'],
+      ['repositories', 'HEROKU_REPOSITORIES_HOST'],
+    ] as const)('sends %s requests to %s', async (service, variable) => {
+      vi.stubEnv(variable, serverUrl)
+      const client = new HerokuApiClient({service, token: 'test-token'})
+
+      await client.get('/some/path')
+
+      expect(receivedPath).toBe('/some/path')
+    })
+
     it('sends particleboard requests to HEROKU_PARTICLEBOARD_URL', async () => {
       vi.stubEnv('HEROKU_PARTICLEBOARD_URL', serverUrl)
       const client = new HerokuApiClient({service: 'particleboard', token: 'test-token'})
@@ -1396,6 +1408,44 @@ describe('SERVICE_CONFIGS', () => {
       vi.stubGlobal('process', undefined)
 
       expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://api.metrics.heroku.com')
+    })
+  })
+
+  describe.each([
+    ['notifications', 'HEROKU_NOTIFICATIONS_HOST', 'https://telex.heroku.com'],
+    ['repositories', 'HEROKU_REPOSITORIES_HOST', 'https://kolkrabbi.heroku.com'],
+  ] as const)('%s config', (service, variable, defaultUrl) => {
+    beforeEach(() => {
+      vi.stubEnv(variable, '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public host, with no default Accept', () => {
+      expect(SERVICE_CONFIGS[service]).toEqual({baseUrl: defaultUrl})
+    })
+
+    it(`uses ${variable} as given`, () => {
+      vi.stubEnv(variable, 'http://localhost:5003')
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe('http://localhost:5003')
+    })
+
+    it(`gives a bare ${variable} hostname https://`, () => {
+      vi.stubEnv(variable, 'host.example.com')
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe('https://host.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe(defaultUrl)
     })
   })
 

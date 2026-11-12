@@ -73,6 +73,14 @@ const metricsClient = new HerokuApiClient({
   token: 'your_token',
 });
 
+// Notifications (telex) and repositories (kolkrabbi). Their hosts come from
+// HEROKU_NOTIFICATIONS_HOST / HEROKU_REPOSITORIES_HOST, then telex.heroku.com /
+// kolkrabbi.heroku.com. Neither sends a default Accept header.
+const notificationsClient = new HerokuApiClient({
+  service: 'notifications',
+  token: 'your_token',
+});
+
 // Particleboard. The host comes from HEROKU_PARTICLEBOARD_URL, then
 // particleboard.heroku.com. An explicit baseUrl takes precedence.
 const particleboardClient = new HerokuApiClient({
@@ -363,7 +371,7 @@ localStorage.debug = 'heroku-fetch:*';
 ```typescript
 interface HerokuApiClientOptions {
   /** Heroku service type */
-  service?: 'platform' | 'data' | 'metrics' | 'particleboard' | 'custom';
+  service?: 'platform' | 'data' | 'metrics' | 'notifications' | 'particleboard' | 'repositories' | 'custom';
 
   /** Static bearer token or function to retrieve token */
   token?: string | (() => string | Promise<string>);
