@@ -57,14 +57,6 @@ describe('HerokuApiClient', () => {
       expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
-    it('should support region for data service', () => {
-      const client = new HerokuApiClient({
-        region: 'eu',
-        service: 'data',
-      })
-      expect(client).toBeInstanceOf(HerokuApiClient)
-    })
-
     it('should support custom headers', () => {
       const client = new HerokuApiClient({
         headers: {
@@ -1514,6 +1506,12 @@ describe('SERVICE_CONFIGS', () => {
       vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
 
       expect(() => new HerokuApiClient({service: 'notifications', token: 'test-token'})).toThrow('HEROKU_NOTIFICATIONS_HOST must use https://')
+    })
+
+    it('ignores a plain http HEROKU_DATA_HOST when a baseUrl is set', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
+
+      expect(() => new HerokuApiClient({baseUrl: 'https://postgres-api.heroku.com', service: 'data', token: 'test-token'})).not.toThrow()
     })
 
     it('leaves an explicit http baseUrl alone', () => {

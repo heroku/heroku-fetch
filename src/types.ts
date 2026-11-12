@@ -102,8 +102,6 @@ export interface ServiceConfig {
    * type.
    */
   defaultAccept?: string;
-  /** Default region (if applicable) */
-  region?: string;
 }
 
 /**
@@ -189,8 +187,6 @@ export interface HerokuApiClientOptions {
    * Omitted → a 401 throws `AuthenticationError` with no retry (unchanged behavior).
    */
   reauthorize?: (context: {signal?: AbortSignal}) => Promise<void> | void;
-  /** Service region (e.g., 'eu', 'us') */
-  region?: string;
   /** Heroku service type (platform, data, metrics, notifications, particleboard, repositories, custom) */
   service?: HerokuService;
   /**

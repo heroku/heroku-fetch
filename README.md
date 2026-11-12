@@ -55,16 +55,9 @@ const dataClient = new HerokuApiClient({
   token: 'your_token',
 });
 
-// Data API with EU region
-const euDataClient = new HerokuApiClient({
-  service: 'data',
-  region: 'eu',
-  token: 'your_token',
-});
-
 // The data client's host comes from HEROKU_DATA_HOST, then
 // HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
-// gets https://. An explicit baseUrl or region takes precedence.
+// gets https://. An explicit baseUrl takes precedence.
 //
 // This applies to every service host variable below: a plain http:// value
 // is accepted only for localhost, 127.0.0.1 or [::1]. Any other http:// host
@@ -387,9 +380,6 @@ interface HerokuApiClientOptions {
 
   /** Custom base URL (required for 'custom' service) */
   baseUrl?: string;
-
-  /** Service region (e.g., 'eu', 'us') */
-  region?: string;
 
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
