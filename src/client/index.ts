@@ -2,7 +2,7 @@
  * Heroku API Client
  *
  * Main client class for making HTTP requests to Heroku APIs.
- * Supports multiple services (platform, data, particleboard), authentication,
+ * Supports multiple services (platform, data, metrics, notifications, particleboard, repositories), authentication,
  * two-factor authentication, and comprehensive error handling.
  */
 
@@ -82,16 +82,14 @@ export class HerokuApiClient {
 
     // Determine base URL
     const serviceConfig = SERVICE_CONFIGS[this.options.service]
-    let baseUrl = options.baseUrl || serviceConfig.baseUrl
 
     if (this.options.service === 'custom' && !options.baseUrl) {
       throw new Error('baseUrl is required when service is "custom"')
     }
 
-    // Apply region if specified (for services that support it)
-    if (options.region && this.options.service === 'data') {
-      baseUrl = `https://postgres-api-${options.region}.heroku.com`
-    }
+    // `||` keeps the service default unread when baseUrl is set: its getter
+    // validates the host env vars, and an unused one mustn't fail the client.
+    const baseUrl = options.baseUrl || serviceConfig.baseUrl
 
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
 
@@ -214,7 +212,7 @@ export class HerokuApiClient {
 
     // Only these are re-read on each request, so changing them takes effect.
     // hooks, headers, the Accept default, the 2FA handler, and the
-    // service/region base URL are baked into the cached ky instance at
+    // service base URL are baked into the cached ky instance at
     // construction, so mutating them here would silently no-op — reject rather
     // than lie about the change landing. `reauthorize` IS read per request (so a
     // mutation would land), but is deliberately kept construction-only: it's an
@@ -363,7 +361,8 @@ export class HerokuApiClient {
    *
    * Replaying a non-idempotent write this way is safe for Heroku's front-door
    * auth, which rejects a 401 before the server executes the request. It is not
-   * universally safe: a `data`/`particleboard`/`custom` host that returns a
+   * universally safe: a host other than platform (`data`, `metrics`,
+   * `notifications`, `particleboard`, `repositories`, `custom`) that returns a
    * downstream or proxied 401 *after* side effects have begun would see the
    * write run twice. Opt such a request out with `reauthorize: false`.
    */

@@ -55,18 +55,31 @@ const dataClient = new HerokuApiClient({
   token: 'your_token',
 });
 
-// Data API with EU region
-const euDataClient = new HerokuApiClient({
-  service: 'data',
-  region: 'eu',
+// The data client's host comes from HEROKU_DATA_HOST, then
+// HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
+// gets https://. An explicit baseUrl takes precedence.
+//
+// This applies to every service host variable below: a plain http:// value
+// is accepted only for localhost, 127.0.0.1 or [::1]. Any other http:// host
+// throws when the client is built, so the token is never sent unencrypted.
+
+// Metrics. The host comes from HEROKU_METRICS_HOST, then
+// api.metrics.heroku.com. An explicit baseUrl takes precedence.
+const metricsClient = new HerokuApiClient({
+  service: 'metrics',
   token: 'your_token',
 });
 
-// The data client's host comes from HEROKU_DATA_HOST, then
-// HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
-// gets https://. An explicit baseUrl or region takes precedence.
+// Notifications (telex) and repositories (kolkrabbi). Their hosts come from
+// HEROKU_NOTIFICATIONS_HOST / HEROKU_REPOSITORIES_HOST, then telex.heroku.com /
+// kolkrabbi.heroku.com. Neither sends a default Accept header.
+const notificationsClient = new HerokuApiClient({
+  service: 'notifications',
+  token: 'your_token',
+});
 
-// Particleboard
+// Particleboard. The host comes from HEROKU_PARTICLEBOARD_URL, then
+// particleboard.heroku.com. An explicit baseUrl takes precedence.
 const particleboardClient = new HerokuApiClient({
   service: 'particleboard',
   token: 'your_token',
@@ -355,7 +368,7 @@ localStorage.debug = 'heroku-fetch:*';
 ```typescript
 interface HerokuApiClientOptions {
   /** Heroku service type */
-  service?: 'platform' | 'data' | 'particleboard' | 'custom';
+  service?: 'platform' | 'data' | 'metrics' | 'notifications' | 'particleboard' | 'repositories' | 'custom';
 
   /** Static bearer token or function to retrieve token */
   token?: string | (() => string | Promise<string>);
@@ -367,9 +380,6 @@ interface HerokuApiClientOptions {
 
   /** Custom base URL (required for 'custom' service) */
   baseUrl?: string;
-
-  /** Service region (e.g., 'eu', 'us') */
-  region?: string;
 
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;

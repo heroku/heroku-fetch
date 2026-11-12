@@ -2,19 +2,50 @@ import type {HerokuService, ServiceConfig} from '../types.js'
 
 const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
 
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '[::1]', 'localhost'])
+
 /**
- * The data API base URL: `HEROKU_DATA_HOST`, then `HEROKU_POSTGRESQL_HOST`,
- * then `https://postgres-api.heroku.com`. These are the variables the Heroku
- * CLI has long honored for the data API. A bare hostname gets `https://`; a
- * value with an `http://` or `https://` scheme, in any case, is used as-is. `process` is guarded for browser builds.
+ * The base URL from the first of `variables` that is set, else `fallback`.
+ * Values are trimmed, and blank ones are skipped. A bare hostname gets `https://`;
+ * a value with an `http://` or `https://` scheme, in any case, is used as-is.
+ * `process` and `process.env` are guarded for browser builds.
+ *
+ * Plain `http://` is allowed only for loopback hosts (local development), so the
+ * client's bearer token is never sent unencrypted to a remote host. Otherwise it
+ * throws, naming the variable but not echoing its value.
  */
-function dataBaseUrl(): string {
+function envBaseUrl(variables: string[], fallback: string): string {
   const env = typeof process === 'undefined' ? undefined : process.env
-  const host = env?.HEROKU_DATA_HOST || env?.HEROKU_POSTGRESQL_HOST
-  if (!host) return 'https://postgres-api.heroku.com'
-  return /^https?:\/\//i.test(host) ? host : `https://${host}`
+  for (const variable of variables) {
+    const host = env?.[variable]?.trim()
+    if (!host) continue
+    if (!/^https?:\/\//i.test(host)) return `https://${host}`
+    if (/^http:/i.test(host) && !isLoopback(host)) {
+      throw new Error(`${variable} must use https:// unless it points at localhost`)
+    }
+
+    return host
+  }
+
+  return fallback
 }
 
+function isLoopback(url: string): boolean {
+  try {
+    return LOOPBACK_HOSTNAMES.has(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Per-service defaults. Services whose host can be overridden by an environment
+ * variable use a `baseUrl` getter, so the variable is read when each client is
+ * built, not at import. `data` honors `HEROKU_DATA_HOST`, then
+ * `HEROKU_POSTGRESQL_HOST`, the variables the Heroku CLI has long used for the
+ * data API. `notifications` and `repositories` set no Accept default,
+ * matching what those hosts have always been sent.
+ */
 export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   custom: {
     // Must be provided by user; no Accept default — the URL may be
@@ -23,18 +54,35 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
     baseUrl: '',
   },
   data: {
-    // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
-      return dataBaseUrl()
+      return envBaseUrl(['HEROKU_DATA_HOST', 'HEROKU_POSTGRESQL_HOST'], 'https://postgres-api.heroku.com')
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
+  metrics: {
+    get baseUrl() {
+      return envBaseUrl(['HEROKU_METRICS_HOST'], 'https://api.metrics.heroku.com')
+    },
+    defaultAccept: HEROKU_V3_ACCEPT,
+  },
+  notifications: {
+    get baseUrl() {
+      return envBaseUrl(['HEROKU_NOTIFICATIONS_HOST'], 'https://telex.heroku.com')
+    },
+  },
   particleboard: {
-    baseUrl: 'https://particleboard.heroku.com',
+    get baseUrl() {
+      return envBaseUrl(['HEROKU_PARTICLEBOARD_URL'], 'https://particleboard.heroku.com')
+    },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
   platform: {
     baseUrl: 'https://api.heroku.com',
     defaultAccept: HEROKU_V3_ACCEPT,
+  },
+  repositories: {
+    get baseUrl() {
+      return envBaseUrl(['HEROKU_REPOSITORIES_HOST'], 'https://kolkrabbi.heroku.com')
+    },
   },
 }

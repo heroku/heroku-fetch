@@ -57,14 +57,6 @@ describe('HerokuApiClient', () => {
       expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
-    it('should support region for data service', () => {
-      const client = new HerokuApiClient({
-        region: 'eu',
-        service: 'data',
-      })
-      expect(client).toBeInstanceOf(HerokuApiClient)
-    })
-
     it('should support custom headers', () => {
       const client = new HerokuApiClient({
         headers: {
@@ -287,7 +279,7 @@ describe('HerokuApiClient', () => {
     })
   })
 
-  describe('data host environment variables (end-to-end)', () => {
+  describe('service host environment variables (end-to-end)', () => {
     let server: Server
     let serverUrl: string
     let receivedPath: string | undefined
@@ -340,6 +332,36 @@ describe('HerokuApiClient', () => {
       await client.get('/postgres/v0/databases/db-1/config')
 
       expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('sends metrics requests to HEROKU_METRICS_HOST', async () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'metrics', token: 'test-token'})
+
+      await client.get('/metrics/my-app/router/latency')
+
+      expect(receivedPath).toBe('/metrics/my-app/router/latency')
+    })
+
+    it.each([
+      ['notifications', 'HEROKU_NOTIFICATIONS_HOST'],
+      ['repositories', 'HEROKU_REPOSITORIES_HOST'],
+    ] as const)('sends %s requests to %s', async (service, variable) => {
+      vi.stubEnv(variable, serverUrl)
+      const client = new HerokuApiClient({service, token: 'test-token'})
+
+      await client.get('/some/path')
+
+      expect(receivedPath).toBe('/some/path')
+    })
+
+    it('sends particleboard requests to HEROKU_PARTICLEBOARD_URL', async () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', serverUrl)
+      const client = new HerokuApiClient({service: 'particleboard', token: 'test-token'})
+
+      await client.get('/account/features')
+
+      expect(receivedPath).toBe('/account/features')
     })
   })
 
@@ -1332,7 +1354,7 @@ describe('SERVICE_CONFIGS', () => {
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
     })
 
-    it.each(['HTTPS://data.example.com', 'Https://data.example.com', 'HTTP://data.example.com'])(
+    it.each(['HTTPS://data.example.com', 'Https://data.example.com'])(
       'keeps an uppercase or mixed-case scheme: %s',
       value => {
         vi.stubEnv('HEROKU_DATA_HOST', value)
@@ -1343,10 +1365,206 @@ describe('SERVICE_CONFIGS', () => {
     )
   })
 
-  it('should have particleboard config', () => {
-    expect(SERVICE_CONFIGS.particleboard).toEqual({
-      baseUrl: 'https://particleboard.heroku.com',
-      defaultAccept: HEROKU_V3_ACCEPT,
+  describe('metrics config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public metrics API', () => {
+      expect(SERVICE_CONFIGS.metrics).toEqual({
+        baseUrl: 'https://api.metrics.heroku.com',
+        defaultAccept: HEROKU_V3_ACCEPT,
+      })
+    })
+
+    it('uses HEROKU_METRICS_HOST as given', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'http://localhost:5002')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('http://localhost:5002')
+    })
+
+    it('gives a bare HEROKU_METRICS_HOST hostname https://', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'metrics.example.com')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://api.metrics.heroku.com')
+    })
+  })
+
+  describe.each([
+    ['notifications', 'HEROKU_NOTIFICATIONS_HOST', 'https://telex.heroku.com'],
+    ['repositories', 'HEROKU_REPOSITORIES_HOST', 'https://kolkrabbi.heroku.com'],
+  ] as const)('%s config', (service, variable, defaultUrl) => {
+    beforeEach(() => {
+      vi.stubEnv(variable, '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public host, with no default Accept', () => {
+      expect(SERVICE_CONFIGS[service]).toEqual({baseUrl: defaultUrl})
+    })
+
+    it(`uses ${variable} as given`, () => {
+      vi.stubEnv(variable, 'http://localhost:5003')
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe('http://localhost:5003')
+    })
+
+    it(`gives a bare ${variable} hostname https://`, () => {
+      vi.stubEnv(variable, 'host.example.com')
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe('https://host.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe(defaultUrl)
+    })
+  })
+
+  describe('environment value handling', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('trims surrounding whitespace', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '  metrics.example.com\n')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+    })
+
+    it('treats a blank value as unset', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '   ')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://api.metrics.heroku.com')
+    })
+
+    it('falls through a blank HEROKU_DATA_HOST to HEROKU_POSTGRESQL_HOST', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', ' ')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+    })
+
+    it.each(['http://localhost:5000', 'http://127.0.0.1:5000', 'http://[::1]:5000', 'HTTP://LOCALHOST'])(
+      'allows plain http for a loopback host: %s',
+      value => {
+        vi.stubEnv('HEROKU_METRICS_HOST', value)
+
+        expect(SERVICE_CONFIGS.metrics.baseUrl).toBe(value)
+      },
+    )
+
+    it.each([
+      'http://metrics.example.com',
+      'HTTP://metrics.example.com',
+      'http://localhost.example.com',
+      'http://127.0.0.1.example.com',
+      'http://user:secret@metrics.example.com',
+    ])('rejects plain http for a remote host: %s', value => {
+      vi.stubEnv('HEROKU_METRICS_HOST', value)
+
+      expect(() => SERVICE_CONFIGS.metrics.baseUrl).toThrow('HEROKU_METRICS_HOST must use https:// unless it points at localhost')
+    })
+
+    it('does not echo the rejected value in the error', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'http://user:secret@metrics.example.com')
+
+      expect(() => SERVICE_CONFIGS.metrics.baseUrl).toThrow(expect.objectContaining({
+        message: expect.not.stringContaining('secret'),
+      }))
+    })
+
+    it('rejects plain http before falling through to the next variable', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(() => SERVICE_CONFIGS.data.baseUrl).toThrow('HEROKU_DATA_HOST must use https://')
+    })
+
+    it('rejects plain http when a client is built', () => {
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+
+      expect(() => new HerokuApiClient({service: 'notifications', token: 'test-token'})).toThrow('HEROKU_NOTIFICATIONS_HOST must use https://')
+    })
+
+    it('ignores a plain http HEROKU_DATA_HOST when a baseUrl is set', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
+
+      expect(() => new HerokuApiClient({baseUrl: 'https://postgres-api.heroku.com', service: 'data', token: 'test-token'})).not.toThrow()
+    })
+
+    it('leaves an explicit http baseUrl alone', () => {
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+
+      expect(() => new HerokuApiClient({baseUrl: 'http://telex.example.com', service: 'notifications', token: 'test-token'})).not.toThrow()
+    })
+
+    it.each(['data', 'metrics', 'notifications', 'particleboard', 'repositories'] as const)(
+      'falls back to the default for %s where process has no env',
+      service => {
+        vi.stubGlobal('process', {browser: true})
+
+        expect(SERVICE_CONFIGS[service].baseUrl).toMatch(/^https:\/\/[a-z-]+(\.[a-z]+)*\.heroku\.com$/)
+      },
+    )
+  })
+
+  describe('particleboard config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public particleboard API', () => {
+      expect(SERVICE_CONFIGS.particleboard).toEqual({
+        baseUrl: 'https://particleboard.heroku.com',
+        defaultAccept: HEROKU_V3_ACCEPT,
+      })
+    })
+
+    it('uses HEROKU_PARTICLEBOARD_URL as given', () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'http://localhost:5001')
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('http://localhost:5001')
+    })
+
+    it('gives a bare HEROKU_PARTICLEBOARD_URL hostname https://', () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'particleboard.example.com')
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.heroku.com')
     })
   })
 
