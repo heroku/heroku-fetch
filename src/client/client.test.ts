@@ -287,7 +287,7 @@ describe('HerokuApiClient', () => {
     })
   })
 
-  describe('data host environment variables (end-to-end)', () => {
+  describe('service host environment variables (end-to-end)', () => {
     let server: Server
     let serverUrl: string
     let receivedPath: string | undefined
@@ -340,6 +340,15 @@ describe('HerokuApiClient', () => {
       await client.get('/postgres/v0/databases/db-1/config')
 
       expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('sends particleboard requests to HEROKU_PARTICLEBOARD_URL', async () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', serverUrl)
+      const client = new HerokuApiClient({service: 'particleboard', token: 'test-token'})
+
+      await client.get('/account/features')
+
+      expect(receivedPath).toBe('/account/features')
     })
   })
 
@@ -1343,10 +1352,41 @@ describe('SERVICE_CONFIGS', () => {
     )
   })
 
-  it('should have particleboard config', () => {
-    expect(SERVICE_CONFIGS.particleboard).toEqual({
-      baseUrl: 'https://particleboard.heroku.com',
-      defaultAccept: HEROKU_V3_ACCEPT,
+  describe('particleboard config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public particleboard API', () => {
+      expect(SERVICE_CONFIGS.particleboard).toEqual({
+        baseUrl: 'https://particleboard.heroku.com',
+        defaultAccept: HEROKU_V3_ACCEPT,
+      })
+    })
+
+    it('uses HEROKU_PARTICLEBOARD_URL as given', () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'http://localhost:5001')
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('http://localhost:5001')
+    })
+
+    it('gives a bare HEROKU_PARTICLEBOARD_URL hostname https://', () => {
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'particleboard.example.com')
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.heroku.com')
     })
   })
 

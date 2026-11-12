@@ -66,7 +66,8 @@ const euDataClient = new HerokuApiClient({
 // HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
 // gets https://. An explicit baseUrl or region takes precedence.
 
-// Particleboard
+// Particleboard. The host comes from HEROKU_PARTICLEBOARD_URL, then
+// particleboard.heroku.com. An explicit baseUrl takes precedence.
 const particleboardClient = new HerokuApiClient({
   service: 'particleboard',
   token: 'your_token',
