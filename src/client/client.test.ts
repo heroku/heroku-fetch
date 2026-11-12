@@ -342,6 +342,15 @@ describe('HerokuApiClient', () => {
       expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
     })
 
+    it('sends metrics requests to HEROKU_METRICS_HOST', async () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'metrics', token: 'test-token'})
+
+      await client.get('/metrics/my-app/router/latency')
+
+      expect(receivedPath).toBe('/metrics/my-app/router/latency')
+    })
+
     it('sends particleboard requests to HEROKU_PARTICLEBOARD_URL', async () => {
       vi.stubEnv('HEROKU_PARTICLEBOARD_URL', serverUrl)
       const client = new HerokuApiClient({service: 'particleboard', token: 'test-token'})
@@ -1350,6 +1359,44 @@ describe('SERVICE_CONFIGS', () => {
         expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.example.com')
       },
     )
+  })
+
+  describe('metrics config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public metrics API', () => {
+      expect(SERVICE_CONFIGS.metrics).toEqual({
+        baseUrl: 'https://api.metrics.heroku.com',
+        defaultAccept: HEROKU_V3_ACCEPT,
+      })
+    })
+
+    it('uses HEROKU_METRICS_HOST as given', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'http://localhost:5002')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('http://localhost:5002')
+    })
+
+    it('gives a bare HEROKU_METRICS_HOST hostname https://', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', 'metrics.example.com')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://api.metrics.heroku.com')
+    })
   })
 
   describe('particleboard config', () => {

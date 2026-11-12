@@ -66,6 +66,13 @@ const euDataClient = new HerokuApiClient({
 // HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
 // gets https://. An explicit baseUrl or region takes precedence.
 
+// Metrics. The host comes from HEROKU_METRICS_HOST, then
+// api.metrics.heroku.com. An explicit baseUrl takes precedence.
+const metricsClient = new HerokuApiClient({
+  service: 'metrics',
+  token: 'your_token',
+});
+
 // Particleboard. The host comes from HEROKU_PARTICLEBOARD_URL, then
 // particleboard.heroku.com. An explicit baseUrl takes precedence.
 const particleboardClient = new HerokuApiClient({
@@ -356,7 +363,7 @@ localStorage.debug = 'heroku-fetch:*';
 ```typescript
 interface HerokuApiClientOptions {
   /** Heroku service type */
-  service?: 'platform' | 'data' | 'particleboard' | 'custom';
+  service?: 'platform' | 'data' | 'metrics' | 'particleboard' | 'custom';
 
   /** Static bearer token or function to retrieve token */
   token?: string | (() => string | Promise<string>);

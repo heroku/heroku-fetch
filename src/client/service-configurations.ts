@@ -22,6 +22,12 @@ function dataBaseUrl(): string {
   return host ? toBaseUrl(host) : 'https://postgres-api.heroku.com'
 }
 
+/** The metrics API base URL: `HEROKU_METRICS_HOST`, then `https://api.metrics.heroku.com`. */
+function metricsBaseUrl(): string {
+  const host = readEnv('HEROKU_METRICS_HOST')
+  return host ? toBaseUrl(host) : 'https://api.metrics.heroku.com'
+}
+
 /** The particleboard base URL: `HEROKU_PARTICLEBOARD_URL`, then `https://particleboard.heroku.com`. */
 function particleboardBaseUrl(): string {
   const host = readEnv('HEROKU_PARTICLEBOARD_URL')
@@ -39,6 +45,13 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
     // A getter so the environment is read when each client is built, not at import.
     get baseUrl() {
       return dataBaseUrl()
+    },
+    defaultAccept: HEROKU_V3_ACCEPT,
+  },
+  metrics: {
+    // A getter so the environment is read when each client is built, not at import.
+    get baseUrl() {
+      return metricsBaseUrl()
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },

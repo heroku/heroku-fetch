@@ -2,7 +2,7 @@
  * Heroku API Client
  *
  * Main client class for making HTTP requests to Heroku APIs.
- * Supports multiple services (platform, data, particleboard), authentication,
+ * Supports multiple services (platform, data, metrics, particleboard), authentication,
  * two-factor authentication, and comprehensive error handling.
  */
 
@@ -363,7 +363,7 @@ export class HerokuApiClient {
    *
    * Replaying a non-idempotent write this way is safe for Heroku's front-door
    * auth, which rejects a 401 before the server executes the request. It is not
-   * universally safe: a `data`/`particleboard`/`custom` host that returns a
+   * universally safe: a `data`/`metrics`/`particleboard`/`custom` host that returns a
    * downstream or proxied 401 *after* side effects have begun would see the
    * write run twice. Opt such a request out with `reauthorize: false`.
    */

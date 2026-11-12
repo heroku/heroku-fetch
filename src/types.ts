@@ -1,4 +1,4 @@
-export type HerokuService = 'custom' | 'data' | 'particleboard' | 'platform'
+export type HerokuService = 'custom' | 'data' | 'metrics' | 'particleboard' | 'platform'
 
 /**
  * A `beforeRequest` hook: runs after the client's built-ins have prepared the
@@ -191,7 +191,7 @@ export interface HerokuApiClientOptions {
   reauthorize?: (context: {signal?: AbortSignal}) => Promise<void> | void;
   /** Service region (e.g., 'eu', 'us') */
   region?: string;
-  /** Heroku service type (platform, data, particleboard, custom) */
+  /** Heroku service type (platform, data, metrics, particleboard, custom) */
   service?: HerokuService;
   /**
    * Default `AbortSignal` applied to every request this client makes: when it
