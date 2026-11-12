@@ -1449,6 +1449,41 @@ describe('SERVICE_CONFIGS', () => {
     })
   })
 
+  describe('environment value handling', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('trims surrounding whitespace', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '  metrics.example.com\n')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+    })
+
+    it('treats a blank value as unset', () => {
+      vi.stubEnv('HEROKU_METRICS_HOST', '   ')
+
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://api.metrics.heroku.com')
+    })
+
+    it('falls through a blank HEROKU_DATA_HOST to HEROKU_POSTGRESQL_HOST', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', ' ')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+    })
+
+    it.each(['data', 'metrics', 'notifications', 'particleboard', 'repositories'] as const)(
+      'falls back to the default for %s where process has no env',
+      service => {
+        vi.stubGlobal('process', {browser: true})
+
+        expect(SERVICE_CONFIGS[service].baseUrl).toMatch(/^https:\/\/[a-z-]+(\.[a-z]+)*\.heroku\.com$/)
+      },
+    )
+  })
+
   describe('particleboard config', () => {
     beforeEach(() => {
       vi.stubEnv('HEROKU_PARTICLEBOARD_URL', '')
