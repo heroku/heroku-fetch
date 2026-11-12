@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.6...heroku-fetch-v0.3.0) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* add metrics, notifications and repositories services; honor host env vars; remove region ([#103](https://github.com/heroku/heroku-fetch/issues/103))
+
+### Features
+
+* add metrics, notifications and repositories services; honor host env vars; remove region ([#103](https://github.com/heroku/heroku-fetch/issues/103)) ([74b7c20](https://github.com/heroku/heroku-fetch/commit/74b7c2000358482d7e73996c4028f996ce875e53))
+
 ## [0.2.6](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.5...heroku-fetch-v0.2.6) (2026-11-11)
 
 
