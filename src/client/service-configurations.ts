@@ -3,39 +3,67 @@ import type {HerokuService, ServiceConfig} from '../types.js'
 const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '[::1]', 'localhost'])
+const TRUSTED_HEROKU_DOMAINS = ['heroku.com', 'herokai.com', 'herokuspace.com', 'herokudev.com']
 
 /**
  * The base URL from the first of `variables` that is set, else `fallback`.
  * Values are trimmed, and blank ones are skipped. A bare hostname gets `https://`;
- * a value with an `http://` or `https://` scheme, in any case, is used as-is.
+ * a value with an `http://` or `https://` scheme is parsed as given.
  * `process` and `process.env` are guarded for browser builds.
  *
- * Plain `http://` is allowed only for loopback hosts (local development), so the
- * client's bearer token is never sent unencrypted to a remote host. Otherwise it
- * throws, naming the variable but not echoing its value.
+ * Hostnames must be in an approved Heroku domain or loopback. Plain `http://` is
+ * allowed only for loopback hosts (local development), so the client's bearer
+ * token is never sent unencrypted to a remote host. Errors name the variable but
+ * never echo its value.
  */
 function envBaseUrl(variables: string[], fallback: string): string {
   const env = typeof process === 'undefined' ? undefined : process.env
   for (const variable of variables) {
-    const host = env?.[variable]?.trim()
-    if (!host) continue
-    if (!/^https?:\/\//i.test(host)) return `https://${host}`
-    if (/^http:/i.test(host) && !isLoopback(host)) {
-      throw new Error(`${variable} must use https:// unless it points at localhost`)
-    }
+    const value = env?.[variable]?.trim()
+    if (!value) continue
 
-    return host
+    return validatedEnvBaseUrl(variable, value)
   }
 
   return fallback
 }
 
-function isLoopback(url: string): boolean {
+function validatedEnvBaseUrl(variable: string, value: string): string {
+  const explicitScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(value)
+  const candidate = explicitScheme ? value : `https://${value}`
+  let url: URL
+
   try {
-    return LOOPBACK_HOSTNAMES.has(new URL(url).hostname)
+    url = new URL(candidate)
   } catch {
-    return false
+    throw new Error(`${variable} must be a valid Heroku service URL`)
   }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`${variable} must use http:// or https://`)
+  }
+
+  // URL.username/password omit an empty `@`, so also check the input for that
+  // delimiter before accepting the parsed URL.
+  if (url.username || url.password || candidate.includes('@')) {
+    throw new Error(`${variable} must not include user information`)
+  }
+
+  if (url.pathname !== '/' || url.search || url.hash || candidate.includes('?') || candidate.includes('#')) {
+    throw new Error(`${variable} must not include a path, query, or fragment`)
+  }
+
+  const loopback = LOOPBACK_HOSTNAMES.has(url.hostname)
+  if (url.protocol === 'http:' && !loopback) {
+    throw new Error(`${variable} must use https:// unless it points at localhost`)
+  }
+
+  const approvedDomain = TRUSTED_HEROKU_DOMAINS.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`))
+  if (!loopback && !approvedDomain) {
+    throw new Error(`${variable} must use a heroku.com, herokai.com, herokuspace.com, or herokudev.com host`)
+  }
+
+  return url.origin
 }
 
 /**
@@ -55,7 +83,7 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   },
   data: {
     get baseUrl() {
-      return envBaseUrl(['HEROKU_DATA_HOST', 'HEROKU_POSTGRESQL_HOST'], 'https://postgres-api.heroku.com')
+      return envBaseUrl(['HEROKU_DATA_HOST', 'HEROKU_POSTGRESQL_HOST'], 'https://api.data.heroku.com')
     },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
