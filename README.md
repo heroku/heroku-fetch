@@ -56,12 +56,20 @@ const dataClient = new HerokuApiClient({
 });
 
 // The data client's host comes from HEROKU_DATA_HOST, then
-// HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
+// HEROKU_POSTGRESQL_HOST, then https://api.data.heroku.com. A bare hostname
 // gets https://. An explicit baseUrl takes precedence.
 //
-// This applies to every service host variable below: a plain http:// value
-// is accepted only for localhost, 127.0.0.1 or [::1]. Any other http:// host
-// throws when the client is built, so the token is never sent unencrypted.
+// Every environment-configured service host must use heroku.com, herokai.com,
+// herokuspace.com, herokudev.com, or the loopback hosts localhost, 127.0.0.1
+// and [::1]. Remote hosts require HTTPS; HTTP is allowed only for loopback.
+// This applies to HEROKU_DATA_HOST, HEROKU_POSTGRESQL_HOST,
+// HEROKU_METRICS_HOST, HEROKU_NOTIFICATIONS_HOST, HEROKU_PARTICLEBOARD_URL
+// and HEROKU_REPOSITORIES_HOST.
+// Configured URLs are reduced to their origin; user information, non-root
+// paths, queries and fragments are rejected. Explicit baseUrl values remain
+// the caller's responsibility. In particular, *.herokuapp.com is not trusted
+// for environment-configured hosts; internal staging setups should use an
+// approved Heroku-owned hostname instead.
 
 // Metrics. The host comes from HEROKU_METRICS_HOST, then
 // api.metrics.heroku.com. An explicit baseUrl takes precedence.

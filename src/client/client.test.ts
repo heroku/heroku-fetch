@@ -302,6 +302,7 @@ describe('HerokuApiClient', () => {
 
     afterEach(async () => {
       vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
       await new Promise<void>(resolve => {
         server.close(() => resolve())
       })
@@ -326,12 +327,28 @@ describe('HerokuApiClient', () => {
     })
 
     it('lets an explicit baseUrl win over the variables', async () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'data.invalid')
+      vi.stubEnv('HEROKU_DATA_HOST', 'attacker.example')
       const client = new HerokuApiClient({baseUrl: serverUrl, service: 'data', token: 'test-token'})
 
       await client.get('/postgres/v0/databases/db-1/config')
 
       expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('blocks requests and credential resolution for an untrusted environment host', async () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://attacker.example')
+      const tokenProvider = vi.fn(() => 'test-token')
+      const fetchMock = vi.fn(async () => new Response('{}'))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await expect(async () => {
+        const client = new HerokuApiClient({service: 'data', token: tokenProvider})
+        await client.get('/postgres/v0/databases/db-1/config')
+      }).rejects.toThrow('HEROKU_DATA_HOST must use a heroku.com, herokai.com, herokuspace.com, or herokudev.com host')
+
+      expect(tokenProvider).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(receivedPath).toBeUndefined()
     })
 
     it('sends metrics requests to HEROKU_METRICS_HOST', async () => {
@@ -1324,28 +1341,28 @@ describe('SERVICE_CONFIGS', () => {
 
     it('defaults to the public data API', () => {
       expect(SERVICE_CONFIGS.data).toEqual({
-        baseUrl: 'https://postgres-api.heroku.com',
+        baseUrl: 'https://api.data.heroku.com',
         defaultAccept: HEROKU_V3_ACCEPT,
       })
     })
 
     it('uses HEROKU_DATA_HOST as an https host', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'data.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.heroku.com')
     })
 
     it('uses HEROKU_POSTGRESQL_HOST when HEROKU_DATA_HOST is unset', () => {
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.heroku.com')
     })
 
     it('prefers HEROKU_DATA_HOST over HEROKU_POSTGRESQL_HOST', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'data.heroku.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.heroku.com')
     })
 
     it('keeps a scheme given in the variable', () => {
@@ -1354,13 +1371,13 @@ describe('SERVICE_CONFIGS', () => {
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
     })
 
-    it.each(['HTTPS://data.example.com', 'Https://data.example.com'])(
-      'keeps an uppercase or mixed-case scheme: %s',
+    it.each(['HTTPS://data.heroku.com', 'Https://data.heroku.com'])(
+      'normalizes an uppercase or mixed-case scheme: %s',
       value => {
         vi.stubEnv('HEROKU_DATA_HOST', value)
 
-        expect(SERVICE_CONFIGS.data.baseUrl).toBe(value)
-        expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.example.com')
+        expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.heroku.com')
+        expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.heroku.com')
       },
     )
   })
@@ -1389,9 +1406,9 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it('gives a bare HEROKU_METRICS_HOST hostname https://', () => {
-      vi.stubEnv('HEROKU_METRICS_HOST', 'metrics.example.com')
+      vi.stubEnv('HEROKU_METRICS_HOST', 'metrics.heroku.com')
 
-      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.heroku.com')
     })
 
     it('falls back to the default where there is no process', () => {
@@ -1427,9 +1444,9 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it(`gives a bare ${variable} hostname https://`, () => {
-      vi.stubEnv(variable, 'host.example.com')
+      vi.stubEnv(variable, 'host.heroku.com')
 
-      expect(SERVICE_CONFIGS[service].baseUrl).toBe('https://host.example.com')
+      expect(SERVICE_CONFIGS[service].baseUrl).toBe('https://host.heroku.com')
     })
 
     it('falls back to the default where there is no process', () => {
@@ -1448,9 +1465,9 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it('trims surrounding whitespace', () => {
-      vi.stubEnv('HEROKU_METRICS_HOST', '  metrics.example.com\n')
+      vi.stubEnv('HEROKU_METRICS_HOST', '  metrics.heroku.com\n')
 
-      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.example.com')
+      expect(SERVICE_CONFIGS.metrics.baseUrl).toBe('https://metrics.heroku.com')
     })
 
     it('treats a blank value as unset', () => {
@@ -1461,9 +1478,9 @@ describe('SERVICE_CONFIGS', () => {
 
     it('falls through a blank HEROKU_DATA_HOST to HEROKU_POSTGRESQL_HOST', () => {
       vi.stubEnv('HEROKU_DATA_HOST', ' ')
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.heroku.com')
     })
 
     it.each(['http://localhost:5000', 'http://127.0.0.1:5000', 'http://[::1]:5000', 'HTTP://LOCALHOST'])(
@@ -1471,16 +1488,15 @@ describe('SERVICE_CONFIGS', () => {
       value => {
         vi.stubEnv('HEROKU_METRICS_HOST', value)
 
-        expect(SERVICE_CONFIGS.metrics.baseUrl).toBe(value)
+        expect(SERVICE_CONFIGS.metrics.baseUrl).toBe(value.toLowerCase())
       },
     )
 
     it.each([
-      'http://metrics.example.com',
-      'HTTP://metrics.example.com',
+      'http://metrics.heroku.com',
+      'HTTP://metrics.heroku.com',
       'http://localhost.example.com',
       'http://127.0.0.1.example.com',
-      'http://user:secret@metrics.example.com',
     ])('rejects plain http for a remote host: %s', value => {
       vi.stubEnv('HEROKU_METRICS_HOST', value)
 
@@ -1488,7 +1504,7 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it('does not echo the rejected value in the error', () => {
-      vi.stubEnv('HEROKU_METRICS_HOST', 'http://user:secret@metrics.example.com')
+      vi.stubEnv('HEROKU_METRICS_HOST', 'http://user:secret@metrics.heroku.com')
 
       expect(() => SERVICE_CONFIGS.metrics.baseUrl).toThrow(expect.objectContaining({
         message: expect.not.stringContaining('secret'),
@@ -1496,26 +1512,26 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it('rejects plain http before falling through to the next variable', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.heroku.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.heroku.com')
 
       expect(() => SERVICE_CONFIGS.data.baseUrl).toThrow('HEROKU_DATA_HOST must use https://')
     })
 
     it('rejects plain http when a client is built', () => {
-      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.heroku.com')
 
       expect(() => new HerokuApiClient({service: 'notifications', token: 'test-token'})).toThrow('HEROKU_NOTIFICATIONS_HOST must use https://')
     })
 
     it('ignores a plain http HEROKU_DATA_HOST when a baseUrl is set', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'http://data.heroku.com')
 
-      expect(() => new HerokuApiClient({baseUrl: 'https://postgres-api.heroku.com', service: 'data', token: 'test-token'})).not.toThrow()
+      expect(() => new HerokuApiClient({baseUrl: 'https://api.data.heroku.com', service: 'data', token: 'test-token'})).not.toThrow()
     })
 
     it('leaves an explicit http baseUrl alone', () => {
-      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.example.com')
+      vi.stubEnv('HEROKU_NOTIFICATIONS_HOST', 'http://telex.heroku.com')
 
       expect(() => new HerokuApiClient({baseUrl: 'http://telex.example.com', service: 'notifications', token: 'test-token'})).not.toThrow()
     })
@@ -1554,9 +1570,9 @@ describe('SERVICE_CONFIGS', () => {
     })
 
     it('gives a bare HEROKU_PARTICLEBOARD_URL hostname https://', () => {
-      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'particleboard.example.com')
+      vi.stubEnv('HEROKU_PARTICLEBOARD_URL', 'particleboard.heroku.com')
 
-      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.example.com')
+      expect(SERVICE_CONFIGS.particleboard.baseUrl).toBe('https://particleboard.heroku.com')
     })
 
     it('falls back to the default where there is no process', () => {
