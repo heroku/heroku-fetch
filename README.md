@@ -56,8 +56,8 @@ const dataClient = new HerokuApiClient({
 });
 
 // The data client's host comes from HEROKU_DATA_HOST, then
-// HEROKU_POSTGRESQL_HOST, then https://api.data.heroku.com. An explicit
-// baseUrl takes precedence.
+// HEROKU_POSTGRESQL_HOST, then https://api.data.heroku.com. A bare hostname
+// gets https://. An explicit baseUrl takes precedence.
 //
 // Every environment-configured service host must use heroku.com, herokai.com,
 // herokuspace.com, herokudev.com, or the loopback hosts localhost, 127.0.0.1
