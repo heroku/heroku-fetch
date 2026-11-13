@@ -157,7 +157,8 @@ heroku dynos --app my-app --json
 
 ### 7. `pg-info.ts` - PostgreSQL Database Info (Data API)
 
-Example calling the Data API (postgres-api.heroku.com) endpoint.
+Example calling the Data API (`api.data.heroku.com` by default; configurable
+through `HEROKU_DATA_HOST` or `HEROKU_POSTGRESQL_HOST`) endpoint.
 
 **Features:**
 - Multiple service clients (platform + data)

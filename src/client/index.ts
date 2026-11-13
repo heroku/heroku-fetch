@@ -29,7 +29,7 @@ import {
   createWarningAfterHook,
 } from './http-request-hooks.js'
 import {RequestIdStore} from './request-id.js'
-import {SERVICE_CONFIGS} from './service-configurations.js'
+import {resolveDataBaseUrl, SERVICE_CONFIGS} from './service-configurations.js'
 import {resolveUserAgentHeader} from './user-agent.js'
 
 /**
@@ -82,15 +82,18 @@ export class HerokuApiClient {
 
     // Determine base URL
     const serviceConfig = SERVICE_CONFIGS[this.options.service]
-    let baseUrl = options.baseUrl || serviceConfig.baseUrl
+    let baseUrl = options.region && this.options.service === 'data'
+      ? `https://postgres-api-${options.region}.heroku.com`
+      : options.baseUrl || serviceConfig.baseUrl
 
     if (this.options.service === 'custom' && !options.baseUrl) {
       throw new Error('baseUrl is required when service is "custom"')
     }
 
-    // Apply region if specified (for services that support it)
-    if (options.region && this.options.service === 'data') {
-      baseUrl = `https://postgres-api-${options.region}.heroku.com`
+    // `data` requests carry Heroku credentials. Validate the final target even
+    // when callers supply baseUrl or region, before any token provider runs.
+    if (this.options.service === 'data') {
+      baseUrl = resolveDataBaseUrl(baseUrl)
     }
 
     debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)

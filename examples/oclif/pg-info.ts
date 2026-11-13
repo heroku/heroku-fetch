@@ -4,7 +4,9 @@
  * Run: npx tsx examples/oclif/pg-info.ts --app YOUR_APP_NAME
  *
  * This demonstrates how to use heroku-fetch to call a data-api endpoint
- * (postgres-api.heroku.com) in an oclif command.
+ * (https://api.data.heroku.com by default, or
+ * https://postgres-api-<region>.heroku.com when a region is specified) in an
+ * oclif command.
  *
  * Based on the pattern from heroku/cli pg:info command.
  */
@@ -153,7 +155,8 @@ export default class PgInfo extends Command {
       // Fetch database info from data API for each addon
       let dbs: DBObject[] = await Promise.all(pgAddons.map(async addon => {
         try {
-          // Call the data API endpoint (postgres-api.heroku.com)
+          // Call the data API endpoint (https://api.data.heroku.com by default;
+          // a regional client uses https://postgres-api-<region>.heroku.com).
           // This matches the original command's call to /client/v11/databases/{id}
           const dbResponse = await dataClient.get(`/client/v11/databases/${addon.id}`)
           const dbInfo = await dbResponse.json() as PgDatabaseTenant

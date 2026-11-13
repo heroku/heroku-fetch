@@ -63,8 +63,17 @@ const euDataClient = new HerokuApiClient({
 });
 
 // The data client's host comes from HEROKU_DATA_HOST, then
-// HEROKU_POSTGRESQL_HOST, then postgres-api.heroku.com. A bare hostname
-// gets https://. An explicit baseUrl or region takes precedence.
+// HEROKU_POSTGRESQL_HOST, then https://api.data.heroku.com. Bare hostnames
+// are treated as HTTPS and host URLs are reduced to their origin. Configured
+// remote hosts must use HTTPS and belong to a Heroku-owned domain; HTTP/HTTPS
+// loopback hosts (for example, localhost) are allowed for local development.
+// Non-root paths, credentials, queries, and fragments are rejected; a root
+// slash normalizes away. The CLI's legacy hostname-based trust policy permits
+// explicit ports on trusted remote hosts.
+//
+// An explicit baseUrl or region still takes precedence, but is subject to the
+// same validation. A region uses the regional
+// postgres-api-<region>.heroku.com host.
 
 // Particleboard
 const particleboardClient = new HerokuApiClient({

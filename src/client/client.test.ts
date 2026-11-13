@@ -65,6 +65,14 @@ describe('HerokuApiClient', () => {
       expect(client).toBeInstanceOf(HerokuApiClient)
     })
 
+    it('validates the final regional host even when baseUrl is also supplied', () => {
+      expect(() => new HerokuApiClient({
+        baseUrl: 'https://api.data.heroku.com',
+        region: 'eu/attacker.example',
+        service: 'data',
+      })).toThrow('Invalid data API host')
+    })
+
     it('should support custom headers', () => {
       const client = new HerokuApiClient({
         headers: {
@@ -340,6 +348,28 @@ describe('HerokuApiClient', () => {
       await client.get('/postgres/v0/databases/db-1/config')
 
       expect(receivedPath).toBe('/postgres/v0/databases/db-1/config')
+    })
+
+    it('rejects an untrusted data host before resolving credentials', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://attacker.example')
+      const tokenProvider = vi.fn(() => 'test-token')
+
+      expect(() => new HerokuApiClient({service: 'data', token: tokenProvider}))
+        .toThrow('Refusing to send Heroku credentials to untrusted data API host')
+      expect(tokenProvider).not.toHaveBeenCalled()
+      expect(receivedPath).toBeUndefined()
+    })
+
+    it('rejects an untrusted explicit data baseUrl before resolving credentials', () => {
+      const tokenProvider = vi.fn(() => 'test-token')
+
+      expect(() => new HerokuApiClient({
+        baseUrl: 'https://attacker.example',
+        service: 'data',
+        token: tokenProvider,
+      })).toThrow('Refusing to send Heroku credentials to untrusted data API host')
+      expect(tokenProvider).not.toHaveBeenCalled()
+      expect(receivedPath).toBeUndefined()
     })
   })
 
@@ -1302,45 +1332,114 @@ describe('SERVICE_CONFIGS', () => {
 
     it('defaults to the public data API', () => {
       expect(SERVICE_CONFIGS.data).toEqual({
-        baseUrl: 'https://postgres-api.heroku.com',
+        baseUrl: 'https://api.data.heroku.com',
         defaultAccept: HEROKU_V3_ACCEPT,
       })
     })
 
     it('uses HEROKU_DATA_HOST as an https host', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'data-api.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com')
     })
 
     it('uses HEROKU_POSTGRESQL_HOST when HEROKU_DATA_HOST is unset', () => {
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'postgresql-api.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://pg.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://postgresql-api.heroku.com')
     })
 
     it('prefers HEROKU_DATA_HOST over HEROKU_POSTGRESQL_HOST', () => {
-      vi.stubEnv('HEROKU_DATA_HOST', 'data.example.com')
-      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'pg.example.com')
+      vi.stubEnv('HEROKU_DATA_HOST', 'data-api.heroku.com')
+      vi.stubEnv('HEROKU_POSTGRESQL_HOST', 'postgresql-api.heroku.com')
 
-      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data.example.com')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com')
     })
 
-    it('keeps a scheme given in the variable', () => {
+    it('normalizes a URL with a root slash to its origin', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://data-api.heroku.com/')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com')
+    })
+
+    it('allows HTTP and non-default ports for loopback development hosts', () => {
       vi.stubEnv('HEROKU_DATA_HOST', 'http://localhost:5000')
 
       expect(SERVICE_CONFIGS.data.baseUrl).toBe('http://localhost:5000')
     })
 
-    it.each(['HTTPS://data.example.com', 'Https://data.example.com', 'HTTP://data.example.com'])(
-      'keeps an uppercase or mixed-case scheme: %s',
+    it.each(['HTTPS://data-api.heroku.com', 'Https://data-api.heroku.com'])(
+      'normalizes an uppercase or mixed-case HTTPS scheme: %s',
       value => {
         vi.stubEnv('HEROKU_DATA_HOST', value)
 
-        expect(SERVICE_CONFIGS.data.baseUrl).toBe(value)
-        expect(new URL(SERVICE_CONFIGS.data.baseUrl).host).toBe('data.example.com')
+        expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com')
       },
     )
+
+    it('normalizes default HTTPS ports and preserves non-default trusted ports', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://data-api.heroku.com:443')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com')
+
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://data-api.heroku.com:8443')
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://data-api.heroku.com:8443')
+    })
+
+    it.each([
+      'attacker.example',
+      'https://heroku.com.attacker.example',
+      'http://api.data.heroku.com',
+      'ftp://localhost',
+      'https://user:secret@api.data.heroku.com',
+      'https://api.data.heroku.com/path',
+      'https://api.data.heroku.com?secret=value',
+      'https://api.data.heroku.com#secret',
+      'https://api.data.heroku.com:',
+      'https://api.data.heroku.com:bad',
+      'https://api.data.heroku.com/..',
+      'https://[invalid-ipv6',
+      'https://api.data.heroku.com\n.evil.example',
+      String.raw`https://api.data.heroku.com\@evil.example`,
+    ])('rejects unsafe data host %s without echoing the configured value', value => {
+      vi.stubEnv('HEROKU_DATA_HOST', value)
+
+      let thrown: unknown
+      let resolvedBaseUrl: string | undefined
+      try {
+        resolvedBaseUrl = SERVICE_CONFIGS.data.baseUrl
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(Error)
+      expect(resolvedBaseUrl).toBeUndefined()
+      expect((thrown as Error).message).not.toContain(value)
+      expect((thrown as Error).message).not.toContain('secret')
+    })
+
+    it('allows Heroku-owned domains over HTTPS', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://custom.data.herokai.com')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://custom.data.herokai.com')
+    })
+
+    it('allows a non-default port on a trusted Heroku domain', () => {
+      vi.stubEnv('HEROKU_DATA_HOST', 'https://custom.data.heroku.com:8443')
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe('https://custom.data.heroku.com:8443')
+    })
+
+    it.each([
+      'http://localhost:8080',
+      'https://localhost:8443',
+      'http://127.0.0.1:8080',
+      'http://127.0.0.2:8080',
+      'http://[::1]:8080',
+    ])('allows loopback data host %s', value => {
+      vi.stubEnv('HEROKU_DATA_HOST', value)
+
+      expect(SERVICE_CONFIGS.data.baseUrl).toBe(value)
+    })
   })
 
   it('should have particleboard config', () => {
