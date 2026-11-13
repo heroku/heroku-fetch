@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.3.0...heroku-fetch-v0.4.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* Environment-configured hosts (HEROKU_DATA_HOST, HEROKU_POSTGRESQL_HOST, HEROKU_METRICS_HOST, HEROKU_NOTIFICATIONS_HOST, HEROKU_PARTICLEBOARD_URL, HEROKU_REPOSITORIES_HOST) must use heroku.com, herokai.com, herokuspace.com, herokudev.com, or loopback; remote hosts require HTTPS; *.herokuapp.com is not allowed. The data service default changes from https://postgres-api.heroku.com to https://api.data.heroku.com.
+
+### Bug Fixes
+
+* redact credentials in debug logs with js-blanket CREDENTIAL_PATTERNS ([#105](https://github.com/heroku/heroku-fetch/issues/105)) ([ea05478](https://github.com/heroku/heroku-fetch/commit/ea05478db40be1ab23b25f557a146e3acefd1de8))
+* validate service hosts and correct data API default ([5b5b00d](https://github.com/heroku/heroku-fetch/commit/5b5b00dd62f551761861196e460a302650862d6b))
+
 ## [0.3.0](https://github.com/heroku/heroku-fetch/compare/heroku-fetch-v0.2.6...heroku-fetch-v0.3.0) (2026-11-12)
 
 
