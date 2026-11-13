@@ -59,7 +59,7 @@
     "@heroku/heroku-cli-util": "^10.8.0"
   },
   "devDependencies": {
-    "@heroku-cli/test-utils": "^1.0.1",
+    "@heroku-cli/test-utils": "^2.0.0",
     "@oclif/core": "^4.10.5",
     "@types/debug": "^4.1.12",
     "@types/node": "^26.5.0",
