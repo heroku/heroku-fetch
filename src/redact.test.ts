@@ -52,6 +52,40 @@ describe('scrubForLog', () => {
     expect(JSON.stringify(result)).not.toContain('abc.def-123')
   })
 
+  it('redacts credentials in an Error message, keeping the surrounding text', async () => {
+    const error = new Error([
+      'token HRKU-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      'db postgres://user:p4ssw0rd@db.example.com:5432/d',
+      'Authorization: Digest username="u", response="abc123"',
+      'Authorization: Bearer abc.def-123',
+    ].join('\n'))
+
+    const {message} = await scrubForLog(error) as {message: string}
+
+    expect(message).toBe([
+      'token [REDACTED]',
+      'db postgres://[REDACTED]@db.example.com:5432/d',
+      'Authorization: Digest [REDACTED]',
+      'Authorization: Bearer [REDACTED]',
+    ].join('\n'))
+  })
+
+  it('redacts a PEM private key body in a nested string value', async () => {
+    const result = await scrubForLog({
+      detail: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----',
+    }) as {detail: string}
+
+    expect(result.detail).toBe('-----BEGIN PRIVATE KEY-----[REDACTED]')
+  })
+
+  it('leaves prose that mentions Basic or Bearer alone', async () => {
+    const message = 'Basic size dynos cannot scale; see the bearer of this note'
+
+    const result = await scrubForLog({message}) as {message: string}
+
+    expect(result.message).toBe(message)
+  })
+
   it('redacts sensitive own-properties attached to an Error', async () => {
     const error = Object.assign(new Error('boom'), {
       detail: 'safe',
@@ -101,9 +135,10 @@ describe('scrubForLog', () => {
     const result = await scrubForLog(error) as {response: {url: string}}
     const url = new URL(result.response.url)
 
-    // Userinfo is percent-encoded in that position, so decode before comparing.
-    expect(decodeURIComponent(url.username)).toBe('[REDACTED]')
-    expect(decodeURIComponent(url.password)).toBe('[REDACTED]')
+    // The URL credential pattern collapses the userinfo to one token, the same
+    // form js-blanket uses for a URL in any other string.
+    expect(result.response.url).toMatch(/^https:\/\/\[REDACTED]@example\.com\//)
+    expect(url.password).toBe('')
     expect(url.searchParams.get('SAMLResponse')).toBe('[REDACTED]')
     expect(url.searchParams.get('nonce')).toBe('[REDACTED]')
     // Benign params are preserved.

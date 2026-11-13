@@ -50,7 +50,7 @@
   },
   "homepage": "https://github.com/heroku/heroku-fetch#readme",
   "dependencies": {
-    "@heroku/js-blanket": "^1.2.0",
+    "@heroku/js-blanket": "^1.4.0",
     "debug": "^4.3.4",
     "ky": "^2.2.0",
     "undici": "^8.11.2"

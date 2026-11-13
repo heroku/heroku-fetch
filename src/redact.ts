@@ -22,17 +22,6 @@ const EXTRA_FIELDS: readonly string[] = [
   'sso',
 ]
 
-/**
- * Redact inline `Bearer`/`Basic` credentials in string leaf values reached
- * while scrubbing an object or Error (e.g. an error message). Bare UUIDs/JWTs
- * are intentionally not matched — they're indistinguishable from benign
- * resource IDs. Note these patterns don't apply to a top-level string passed
- * straight to `scrubForLog`.
- */
-const VALUE_PATTERNS: readonly RegExp[] = [
-  /\b(?:Bearer|Basic)\s+[\w.~+/=-]+/gi,
-]
-
 /** Cap on `error.cause` recursion depth; guards against cyclic chains. */
 const MAX_CAUSE_DEPTH = 8
 
@@ -42,13 +31,18 @@ let scrubberPromise: Promise<ScrubberType> | undefined
 async function getScrubber(): Promise<ScrubberType> {
   if (!scrubberPromise) {
     scrubberPromise = (async () => {
-      const [{Scrubber}, {HEROKU_FIELDS}] = await Promise.all([
+      const [{Scrubber}, {HEROKU_FIELDS}, {CREDENTIAL_PATTERNS}] = await Promise.all([
         import('@heroku/js-blanket/core/scrubber'),
         import('@heroku/js-blanket/core/presets'),
+        import('@heroku/js-blanket/core/patterns'),
       ])
+      // CREDENTIAL_PATTERNS redact credentials in string values reached while
+      // scrubbing an object or Error, such as an error message: Heroku API
+      // tokens, Authorization values, Bearer/Basic credentials, URL passwords
+      // and PEM private keys. Each keeps its context (`Bearer [REDACTED]`).
       return new Scrubber({
         fields: [...HEROKU_FIELDS, ...EXTRA_FIELDS],
-        patterns: [...VALUE_PATTERNS],
+        patterns: CREDENTIAL_PATTERNS,
         replacement: REPLACEMENT,
       })
     })()
@@ -144,8 +138,8 @@ async function scrubError(error: Error, depth: number): Promise<unknown> {
 /**
  * Scrub a value for debug logging. Handles `Error`, `Headers`, plain objects,
  * and primitives (passed through unchanged — a top-level string is not
- * pattern-scrubbed; `VALUE_PATTERNS` only apply to strings nested inside a
- * scrubbed object/Error). Fail-closed: any failure returns `'[unscrubbable]'`
+ * pattern-scrubbed; `CREDENTIAL_PATTERNS` only apply to strings nested inside
+ * a scrubbed object/Error). Fail-closed: any failure returns `'[unscrubbable]'`
  * rather than risking the raw value. `depth` is internal, for `cause`
  * recursion.
  */
