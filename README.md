@@ -112,7 +112,7 @@ build by path. The types are identical in both builds.
 
 | `service` | Default base URL | Override env var | Default `Accept` |
 | --- | --- | --- | --- |
-| `platform` (default) | `https://api.heroku.com` | `HEROKU_PLATFORM_HOST` | Heroku v3 |
+| `platform` (default) | `https://api.heroku.com` | `HEROKU_PLATFORM_HOST`, then `HEROKU_API_URL` | Heroku v3 |
 | `data` | `https://api.data.heroku.com` | `HEROKU_DATA_HOST`, then `HEROKU_POSTGRESQL_HOST` | Heroku v3 |
 | `metrics` | `https://api.metrics.heroku.com` | `HEROKU_METRICS_HOST` | Heroku v3 |
 | `particleboard` | `https://particleboard.heroku.com` | `HEROKU_PARTICLEBOARD_URL` | Heroku v3 |
@@ -144,9 +144,10 @@ client throws:
 
 **Targeting another environment.** heroku-fetch doesn't read the CLI's
 `HEROKU_HOST`. Point `platform` at another environment with
-`HEROKU_PLATFORM_HOST` (for example `api.staging.herokudev.com`) or an
-explicit `baseUrl`. Credentials are looked up per host, so pass the same host
-to `getAuth()` when you resolve the token:
+`HEROKU_PLATFORM_HOST` (for example `api.staging.herokudev.com`), with
+`HEROKU_API_URL` (the variable `heroku-credential-manager`'s login reads), or
+with an explicit `baseUrl`. Credentials are looked up per host, so pass the
+same host to `getAuth()` when you resolve the token:
 
 ```typescript
 const host = 'api.staging.herokudev.com'
@@ -422,7 +423,7 @@ All of these are read on Node only. The browser build reads none of them.
 | Variable | Effect |
 | --- | --- |
 | `HEROKU_API_KEY` | Default bearer token for named services, read on each request when `token` is omitted. Never sent by `custom` clients |
-| `HEROKU_PLATFORM_HOST` | `platform` service host |
+| `HEROKU_PLATFORM_HOST`, then `HEROKU_API_URL` | `platform` service host |
 | `HEROKU_DATA_HOST`, `HEROKU_POSTGRESQL_HOST` | `data` service host |
 | `HEROKU_METRICS_HOST` | `metrics` service host |
 | `HEROKU_PARTICLEBOARD_URL` | `particleboard` service host |
