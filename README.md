@@ -23,8 +23,7 @@ hand:
 - **Safe debug logging.** `DEBUG=heroku:fetch:*` traces requests with tokens
   and other secrets redacted.
 
-It does **not** model Heroku resources. You get raw `Response` objects, not
-typed `App` or `Dyno` objects. For a typed, generated API surface, use
+For typed methods generated from the API schema, use
 [`@heroku/sdk`](https://github.com/heroku/heroku-sdk), which is built on this
 package.
 
@@ -53,9 +52,9 @@ const apps = await response.json()
 await client.patch('/apps/my-app', {maintenance: true})
 ```
 
-## Mental model
+## How it works
 
-There are three ideas to keep in mind:
+Three things shape how you use the client:
 
 1. **One client per service.** A `HerokuApiClient` is bound to one base URL
    when you create it. To talk to the Platform API and the Data API, create
