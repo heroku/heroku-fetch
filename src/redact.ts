@@ -61,12 +61,7 @@ async function getScrubber(): Promise<ScrubberType> {
  * `{}` (no enumerable own-properties); converting first preserves the entries.
  */
 function headersToObject(headers: Headers): Record<string, string> {
-  const out: Record<string, string> = {}
-  // eslint-disable-next-line unicorn/no-array-for-each
-  headers.forEach((value, key) => {
-    out[key] = value
-  })
-  return out
+  return Object.fromEntries(headers)
 }
 
 /**

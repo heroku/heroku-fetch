@@ -419,11 +419,9 @@ export class HerokuApiClient {
           // the original attached as `cause` so consumers don't lose the 401's
           // statusCode/id/request context (and an `instanceof AuthenticationError`
           // check on the cause chain still works). Only set it when the callback
-          // didn't already supply a cause of its own. (Cast for `cause`: the
-          // package targets the ES2020 lib, where it isn't yet on `Error`.)
-          const withCause = reauthorizeError as {cause?: unknown}
-          if (reauthorizeError instanceof Error && withCause.cause === undefined) {
-            withCause.cause = error
+          // didn't already supply a cause of its own.
+          if (reauthorizeError instanceof Error && reauthorizeError.cause === undefined) {
+            reauthorizeError.cause = error
           }
 
           throw reauthorizeError
