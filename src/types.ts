@@ -52,11 +52,11 @@ export interface HerokuHooks {
 export type FetchLike = (input: Request | string | URL, init?: Parameters<typeof fetch>[1]) => Promise<Response>
 
 /**
- * A bearer token, or a function resolving one at request time. A provider may
- * return `undefined` (sync or async) to send the request with no `Authorization`
- * header — appropriate for endpoints or hosts that need no Heroku auth. Requests
- * to endpoints that do require auth then receive a server 401, surfaced as
- * `AuthenticationError`.
+ * A bearer token, or a function resolving one at request time. An empty string,
+ * or a provider returning `undefined` or `''` (sync or async), sends the request
+ * with no `Authorization` header — appropriate for endpoints or hosts that need
+ * no Heroku auth. Requests to endpoints that do require auth then receive a
+ * server 401, surfaced as `AuthenticationError`.
  */
 export type TokenProvider = (() => Promise<string | undefined> | string | undefined) | string
 
@@ -223,7 +223,13 @@ export interface HerokuApiClientOptions {
   signal?: AbortSignal;
   /** Request timeout in milliseconds */
   timeout?: number;
-  /** Static bearer token or function to retrieve token */
+  /**
+   * Static bearer token or function to retrieve token. Omitted (or `undefined`)
+   * → named services use the environment default (`HEROKU_API_KEY`, read per
+   * request, on Node; none in browsers), while a `custom` client sends no
+   * `Authorization` header, since its host may be outside Heroku. Pass a token
+   * explicitly to authenticate a `custom` client.
+   */
   token?: TokenProvider;
   /** Two-factor authentication configuration */
   twoFactor?: TwoFactorOptions;

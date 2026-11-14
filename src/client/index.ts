@@ -72,8 +72,14 @@ export class HerokuApiClient {
       ...options,
     }
 
-    // If no token provided, use default token provider
-    this.tokenProvider = options.token === undefined ? getDefaultTokenProvider() : options.token
+    // With no token, named Heroku services fall back to the environment's default
+    // provider (HEROKU_API_KEY on Node). A `custom` client may point at a host
+    // outside Heroku, so it sends a token only when one is passed explicitly.
+    if (options.token !== undefined) {
+      this.tokenProvider = options.token
+    } else if (this.options.service !== 'custom') {
+      this.tokenProvider = getDefaultTokenProvider()
+    }
 
     // If no twoFactor provided, use default 2FA handler
     if (!options.twoFactor) {

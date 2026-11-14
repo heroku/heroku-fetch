@@ -262,14 +262,14 @@ describe('HerokuApiClient', () => {
     })
 
     it('sends no Authorization header and surfaces a 401 as AuthenticationError', async () => {
-      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+      const client = new HerokuApiClient({baseUrl, service: 'platform'})
 
       await expect(client.get('/apps')).rejects.toBeInstanceOf(AuthenticationError)
       expect(receivedAuth).toBeUndefined()
     })
 
     it('promotes the error body id onto the AuthenticationError', async () => {
-      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+      const client = new HerokuApiClient({baseUrl, service: 'platform'})
 
       await expect(client.get('/apps')).rejects.toMatchObject({
         id: 'unauthorized',
