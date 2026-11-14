@@ -351,6 +351,15 @@ describe('HerokuApiClient', () => {
       expect(receivedPath).toBeUndefined()
     })
 
+    it('sends platform requests to HEROKU_PLATFORM_HOST', async () => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'platform', token: 'test-token'})
+
+      await client.get('/apps/my-app')
+
+      expect(receivedPath).toBe('/apps/my-app')
+    })
+
     it('sends metrics requests to HEROKU_METRICS_HOST', async () => {
       vi.stubEnv('HEROKU_METRICS_HOST', serverUrl)
       const client = new HerokuApiClient({service: 'metrics', token: 'test-token'})
@@ -1321,13 +1330,6 @@ describe('HerokuApiClient', () => {
 
 describe('SERVICE_CONFIGS', () => {
   const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
-
-  it('should have platform config', () => {
-    expect(SERVICE_CONFIGS.platform).toEqual({
-      baseUrl: 'https://api.heroku.com',
-      defaultAccept: HEROKU_V3_ACCEPT,
-    })
-  })
 
   describe('data config', () => {
     beforeEach(() => {

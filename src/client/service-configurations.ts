@@ -69,10 +69,10 @@ function validatedEnvBaseUrl(variable: string, value: string): string {
 /**
  * Per-service defaults. Services whose host can be overridden by an environment
  * variable use a `baseUrl` getter, so the variable is read when each client is
- * built, not at import. `data` honors `HEROKU_DATA_HOST`, then
- * `HEROKU_POSTGRESQL_HOST`, the variables the Heroku CLI has long used for the
- * data API. `notifications` and `repositories` set no Accept default,
- * matching what those hosts have always been sent.
+ * built, not at import. `platform` honors `HEROKU_PLATFORM_HOST`. `data` honors
+ * `HEROKU_DATA_HOST`, then `HEROKU_POSTGRESQL_HOST`, the variables the Heroku
+ * CLI has long used for the data API. `notifications` and `repositories` set no
+ * Accept default, matching what those hosts have always been sent.
  */
 export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
   custom: {
@@ -105,7 +105,9 @@ export const SERVICE_CONFIGS: Record<HerokuService, ServiceConfig> = {
     defaultAccept: HEROKU_V3_ACCEPT,
   },
   platform: {
-    baseUrl: 'https://api.heroku.com',
+    get baseUrl() {
+      return envBaseUrl(['HEROKU_PLATFORM_HOST'], 'https://api.heroku.com')
+    },
     defaultAccept: HEROKU_V3_ACCEPT,
   },
   repositories: {
