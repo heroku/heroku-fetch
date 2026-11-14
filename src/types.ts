@@ -126,8 +126,6 @@ export interface HerokuApiClientOptions {
    * variable. Not validated: you're responsible for the host you pass.
    */
   baseUrl?: string;
-  /** Enable debugging */
-  debug?: boolean;
   /**
    * Override the service's default `Accept` header for this client. Applied
    * only when a request doesn't already carry an `Accept` (so per-call

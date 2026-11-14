@@ -32,10 +32,7 @@ const MAX_SHOWN_WARNINGS = 256
  * token is resolved here, since it comes from an async provider and so can't be
  * a static instance header.
  */
-export function createBeforeRequestHook(
-  getToken: () => Promise<string | undefined>,
-  debug?: boolean,
-): BeforeRequestHook {
+export function createBeforeRequestHook(getToken: () => Promise<string | undefined>): BeforeRequestHook {
   return async ({request}) => {
     // Add authorization header.
     //
@@ -54,9 +51,7 @@ export function createBeforeRequestHook(
     }
 
     debugRequest('%s %s', request.method, request.url)
-    if (debug) {
-      await logScrubbed(debugRequest, 'Headers: %O', request.headers)
-    }
+    await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }
 

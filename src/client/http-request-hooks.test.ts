@@ -72,7 +72,7 @@ describe('createBeforeRequestHook', () => {
   }
 
   it('redacts the Authorization header in debug output', async () => {
-    const hook = createBeforeRequestHook(async () => 'super-secret-token', true)
+    const hook = createBeforeRequestHook(async () => 'super-secret-token')
     const request = new Request('https://api.heroku.com/apps')
 
     const headers = await loggedHeaders(hook, request)
@@ -88,20 +88,23 @@ describe('createBeforeRequestHook', () => {
     // Custom headers reach the request via ky's instance `headers` option, so
     // they're present before this hook runs; it must still redact sensitive
     // ones when logging.
-    const hook = createBeforeRequestHook(async () => {}, true)
+    const hook = createBeforeRequestHook(async () => {})
     const request = new Request('https://api.heroku.com/apps', {
-      headers: {'X-Addon-SSO': 'sso-secret', 'X-Safe': 'ok'},
+      headers: {'Heroku-Two-Factor-Code': '123456', 'X-Addon-SSO': 'sso-secret', 'X-Safe': 'ok'},
     })
 
     const headers = await loggedHeaders(hook, request)
 
     expect(headers?.['x-addon-sso']).toBe('[REDACTED]')
+    expect(headers?.['heroku-two-factor-code']).toBe('[REDACTED]')
     expect(headers?.['x-safe']).toBe('ok')
     expect(JSON.stringify(headers)).not.toContain('sso-secret')
+    expect(JSON.stringify(headers)).not.toContain('123456')
   })
 
-  it('does not log headers when debug is disabled', async () => {
-    const hook = createBeforeRequestHook(async () => 'super-secret-token', false)
+  it('does not log headers when the heroku:fetch:request namespace is disabled', async () => {
+    Object.assign(debugRequestSpy, {enabled: false})
+    const hook = createBeforeRequestHook(async () => 'super-secret-token')
     const request = new Request('https://api.heroku.com/apps')
 
     const headers = await loggedHeaders(hook, request)

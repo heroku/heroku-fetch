@@ -167,7 +167,7 @@ export class HerokuApiClient {
           ...(options.hooks?.afterResponse ?? []),
         ],
         beforeRequest: [
-          createBeforeRequestHook(() => this.getToken(), this.options.debug),
+          createBeforeRequestHook(() => this.getToken()),
           createRequestIdBeforeHook(this.requestIds),
           // Consumer hooks run last: they see (and may override) the fully
           // prepared request after auth and Request-Id are attached.
