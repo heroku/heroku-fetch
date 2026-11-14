@@ -120,7 +120,11 @@ export interface UserAgentOptions {
 }
 
 export interface HerokuApiClientOptions {
-  /** Custom base URL (for 'custom' service type) */
+  /**
+   * Base URL for requests. Required when `service` is `'custom'`. For any other
+   * service it replaces the service default and that service's host environment
+   * variable. Not validated: you're responsible for the host you pass.
+   */
   baseUrl?: string;
   /** Enable debugging */
   debug?: boolean;
