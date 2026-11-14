@@ -12,13 +12,23 @@ const REPLACEMENT = '[REDACTED]'
 
 /**
  * Extra sensitive keys the preset doesn't cover, matched case-insensitively as
- * substrings. `code` is deliberately excluded so it doesn't also redact
+ * substrings, so `key` also covers `X-Access-Key` and `auth` covers `X-Auth`.
+ * Together with the preset they cover the names {@link redactUrl} redacts in a
+ * query string. `code` is deliberately excluded so it doesn't also redact
  * `statusCode`/`errorCode` in logged error objects.
  */
 const EXTRA_FIELDS: readonly string[] = [
-  'secondfactor',
-  'second_factor',
+  'assertion',
+  'auth',
+  'credential',
+  'key',
+  'nonce',
   'otp',
+  'saml',
+  'second_factor',
+  'secondfactor',
+  'session',
+  'signature',
   'sso',
 ]
 

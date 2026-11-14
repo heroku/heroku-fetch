@@ -180,6 +180,38 @@ describe('scrubForLog', () => {
     })
   })
 
+  it('redacts headers whose names suggest a credential, keeping the rest', async () => {
+    const headers = new Headers({
+      Accept: 'application/json',
+      'Request-Id': 'abc',
+      'X-Access-Key': 'k',
+      'X-Api-Signature': 's',
+      'X-Auth': 'a',
+      'X-Credential': 'c',
+      'X-Saml-Assertion': 'sa',
+      'X-Session-Id': 'si',
+    })
+
+    const result = await scrubForLog(headers) as Record<string, string>
+
+    expect(result).toEqual({
+      accept: 'application/json',
+      'request-id': 'abc',
+      'x-access-key': '[REDACTED]',
+      'x-api-signature': '[REDACTED]',
+      'x-auth': '[REDACTED]',
+      'x-credential': '[REDACTED]',
+      'x-saml-assertion': '[REDACTED]',
+      'x-session-id': '[REDACTED]',
+    })
+  })
+
+  it('keeps an error\'s statusCode', async () => {
+    const error = Object.assign(new Error('failed'), {statusCode: 404})
+
+    expect(await scrubForLog(error)).toMatchObject({statusCode: 404})
+  })
+
   it('caps cyclic cause recursion without crashing', async () => {
     const a = new Error('a') as Error & {cause?: unknown}
     const b = new Error('b') as Error & {cause?: unknown}
