@@ -260,11 +260,15 @@ Request bodies are always JSON-serialized. Per-request `options`:
 await client.get('/apps/my-app/releases', {
   headers: {Range: 'version ..; order=desc, max=10'}, // merged over client headers
   searchParams: {limit: 10},
-  timeout: 5_000,             // ms; overrides the client default (30_000)
+  timeout: 5_000,             // ms, or false for none; overrides the client default (30_000)
   signal: controller.signal,  // abort this request
   reauthorize: false,         // skip the 401 refresh for this call
 })
 ```
+
+`timeout` limits how long each attempt waits for the response to start. It
+doesn't cover reading the body, so a long `stream()` isn't cut off. Pass
+`false` for no timeout; `0` throws, because it would abort every request.
 
 A client-level `signal` aborts every request the client makes. It is combined
 with any per-request `signal` and the timeout, so whichever fires first aborts

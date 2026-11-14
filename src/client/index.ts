@@ -49,6 +49,21 @@ function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | 
   return AbortSignal.any(present)
 }
 
+const DEFAULT_TIMEOUT = 30_000
+
+/**
+ * Reject a zero timeout. ky would apply it as a 0 ms limit and abort every
+ * request, while callers passing 0 usually mean "no timeout", which is `false`.
+ * ky validates every other value itself.
+ */
+function checkTimeout<T extends false | number | undefined>(timeout: T): T {
+  if (timeout === 0) {
+    throw new TypeError('timeout must be a positive number of milliseconds, or false for no timeout')
+  }
+
+  return timeout
+}
+
 export class HerokuApiClient {
   private clientPromise: null | Promise<KyInstance> = null
   private kyOptions: KyOptions
@@ -67,9 +82,9 @@ export class HerokuApiClient {
 
   constructor(options: HerokuApiClientOptions = {}) {
     this.options = {
-      service: options.service || 'platform',
-      timeout: options.timeout || 30_000,
       ...options,
+      service: options.service || 'platform',
+      timeout: checkTimeout(options.timeout) ?? DEFAULT_TIMEOUT,
     }
 
     // With no token, named Heroku services fall back to the environment's default
@@ -224,7 +239,12 @@ export class HerokuApiClient {
     // mutation would land), but is deliberately kept construction-only: it's an
     // auth policy that should be fixed for the client, with per-request control
     // exposed instead through `RequestOptions.reauthorize: false`.
-    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
+    if (key === 'timeout') {
+      this.options.timeout = checkTimeout(value as HerokuApiClientOptions['timeout']) ?? DEFAULT_TIMEOUT
+      return
+    }
+
+    if (key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.options as Record<string, any>)[key] = value
       return
@@ -248,7 +268,7 @@ export class HerokuApiClient {
       ...(options?.searchParams && {searchParams: options.searchParams}),
       ...(signal && {signal}),
       method: 'GET',
-      timeout: options?.timeout || this.options.timeout,
+      timeout: checkTimeout(options?.timeout) ?? this.options.timeout,
     }
 
     const client = await this.getClient()
@@ -334,7 +354,7 @@ export class HerokuApiClient {
       ...(options?.searchParams && {searchParams: options.searchParams}),
       ...(signal && {signal}),
       method: options?.method || 'GET',
-      timeout: options?.timeout || this.options.timeout,
+      timeout: checkTimeout(options?.timeout) ?? this.options.timeout,
     }
 
     if (options?.body !== undefined) {

@@ -221,8 +221,13 @@ export interface HerokuApiClientOptions {
    * {@link RequestOptions.signal}, rather than wiring a process-lifetime one.
    */
   signal?: AbortSignal;
-  /** Request timeout in milliseconds */
-  timeout?: number;
+  /**
+   * Milliseconds to wait for each HTTP attempt's response to start, or `false`
+   * for no limit. It doesn't limit reading the body of a returned `Response`, so
+   * a long `stream()` isn't cut off. `0` throws; use `false` for no timeout.
+   * Omitted → 30 000.
+   */
+  timeout?: false | number;
   /**
    * Static bearer token or function to retrieve token. Omitted (or `undefined`)
    * → named services use the environment default (`HEROKU_API_KEY`, read per
@@ -279,8 +284,11 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Enable streaming response */
   stream?: boolean;
-  /** Request timeout override */
-  timeout?: number;
+  /**
+   * Overrides the client's {@link HerokuApiClientOptions.timeout} for this
+   * request: milliseconds, or `false` for no limit. `0` rejects.
+   */
+  timeout?: false | number;
 }
 
 export interface HerokuError {
