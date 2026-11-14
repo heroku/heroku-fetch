@@ -27,6 +27,7 @@ import {
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
+  createRequestLogHook,
   createWarningAfterHook,
 } from './http-request-hooks.js'
 import {RequestIdStore} from './request-id.js'
@@ -147,6 +148,7 @@ export class HerokuApiClient {
       }
     }
 
+    const requestLog = createRequestLogHook()
     this.kyOptions = {
       headers,
       hooks: {
@@ -170,10 +172,14 @@ export class HerokuApiClient {
         beforeRequest: [
           createBeforeRequestHook(() => this.getToken()),
           createRequestIdBeforeHook(this.requestIds),
-          // Consumer hooks run last: they see (and may override) the fully
-          // prepared request after auth and Request-Id are attached.
+          // Consumer hooks see (and may override) the fully prepared request
+          // after auth and Request-Id are attached.
           ...(options.hooks?.beforeRequest ?? []),
+          // Logged last, so the log shows the request as it is sent.
+          requestLog,
         ],
+        // A 2FA replay goes through ky's retry, which skips beforeRequest.
+        beforeRetry: [requestLog],
       },
       prefix: baseUrl,
       timeout: this.options.timeout,

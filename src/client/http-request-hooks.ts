@@ -49,11 +49,21 @@ export function createBeforeRequestHook(getToken: () => Promise<string | undefin
       request.headers.set('Authorization', `Bearer ${token}`)
       debugAuth('Authorization header added')
     }
+  }
+}
 
-    if (debugRequest.enabled) {
-      debugRequest('%s %s', request.method, redactUrl(request.url))
-    }
+/**
+ * Create a hook that logs the request as sent: method, redacted URL, and
+ * scrubbed headers on `heroku:fetch:request`. Registered last in
+ * `beforeRequest`, after the consumer hooks, so it shows `Request-Id` and any
+ * header a hook added or replaced; and in `beforeRetry`, so the 2FA replay
+ * (sent through ky's retry, which skips `beforeRequest`) is logged too.
+ */
+export function createRequestLogHook(): (state: {request: Request}) => Promise<void> {
+  return async ({request}) => {
+    if (!debugRequest.enabled) return
 
+    debugRequest('%s %s', request.method, redactUrl(request.url))
     await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }

@@ -13,6 +13,7 @@ import {
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
+  createRequestLogHook,
   createWarningAfterHook,
 } from './http-request-hooks.js'
 import {REQUEST_ID_HEADER, RequestIdStore} from './request-id.js'
@@ -46,12 +47,26 @@ function collectMetadata(headers: Record<string, string>, status = 200): Respons
 }
 
 describe('createBeforeRequestHook', () => {
+  it('sets the bearer token on the request', async () => {
+    const request = new Request('https://api.heroku.com/apps')
+    await createBeforeRequestHook(async () => 'super-secret-token')({options: {} as NormalizedOptions, request})
+    expect(request.headers.get('Authorization')).toBe('Bearer super-secret-token')
+  })
+
+  it('sets no Authorization header without a token', async () => {
+    const request = new Request('https://api.heroku.com/apps')
+    await createBeforeRequestHook(async () => {})({options: {} as NormalizedOptions, request})
+    expect(request.headers.has('Authorization')).toBe(false)
+  })
+})
+
+describe('createRequestLogHook', () => {
   let debugRequestSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     debugRequestSpy = vi.spyOn(debugLoggers, 'debugRequest').mockImplementation(() => true)
-    // logScrubbed() gates on the logger's `.enabled` flag; the mock fn
-    // doesn't carry one, so set it so the scrubbed header line is emitted.
+    // The hook and logScrubbed() gate on the logger's `.enabled` flag; the
+    // mock fn doesn't carry one, so set it so the lines are emitted.
     Object.assign(debugRequestSpy, {enabled: true})
   })
 
@@ -59,67 +74,43 @@ describe('createBeforeRequestHook', () => {
     vi.restoreAllMocks()
   })
 
-  /**
-   * Invoke a beforeRequest hook against a bare Request and return the
-   * headers object passed to the `Headers: %O` debug line, if any.
-   */
-  async function loggedHeaders(
-    hook: ReturnType<typeof createBeforeRequestHook>,
-    request: Request,
-  ): Promise<Record<string, string> | undefined> {
-    await hook({options: {} as NormalizedOptions, request})
+  /** Run the log hook on `request` and return the logged headers, if any. */
+  async function loggedHeaders(request: Request): Promise<Record<string, string> | undefined> {
+    await createRequestLogHook()({request})
     const call = debugRequestSpy.mock.calls.find(([format]) => format === 'Headers: %O')
     return call?.[1] as Record<string, string> | undefined
   }
 
-  it('redacts the Authorization header in debug output', async () => {
-    const hook = createBeforeRequestHook(async () => 'super-secret-token')
-    const request = new Request('https://api.heroku.com/apps')
+  it('redacts sensitive headers and keeps benign ones', async () => {
+    const headers = await loggedHeaders(new Request('https://api.heroku.com/apps', {
+      headers: {
+        Authorization: 'Bearer super-secret-token',
+        'Heroku-Two-Factor-Code': '123456',
+        'X-Addon-SSO': 'sso-secret',
+        'X-Safe': 'ok',
+      },
+    }))
 
-    const headers = await loggedHeaders(hook, request)
-
-    // The token must actually be set on the request...
-    expect(request.headers.get('Authorization')).toBe('Bearer super-secret-token')
-    // ...but must never appear in the logged headers.
     expect(headers?.authorization).toBe('[REDACTED]')
-    expect(JSON.stringify(headers)).not.toContain('super-secret-token')
-  })
-
-  it('redacts other sensitive headers already on the request', async () => {
-    // Custom headers reach the request via ky's instance `headers` option, so
-    // they're present before this hook runs; it must still redact sensitive
-    // ones when logging.
-    const hook = createBeforeRequestHook(async () => {})
-    const request = new Request('https://api.heroku.com/apps', {
-      headers: {'Heroku-Two-Factor-Code': '123456', 'X-Addon-SSO': 'sso-secret', 'X-Safe': 'ok'},
-    })
-
-    const headers = await loggedHeaders(hook, request)
-
-    expect(headers?.['x-addon-sso']).toBe('[REDACTED]')
     expect(headers?.['heroku-two-factor-code']).toBe('[REDACTED]')
+    expect(headers?.['x-addon-sso']).toBe('[REDACTED]')
     expect(headers?.['x-safe']).toBe('ok')
-    expect(JSON.stringify(headers)).not.toContain('sso-secret')
-    expect(JSON.stringify(headers)).not.toContain('123456')
+    for (const secret of ['super-secret-token', '123456', 'sso-secret']) {
+      expect(JSON.stringify(headers)).not.toContain(secret)
+    }
   })
 
   it('redacts credentials in the logged request URL', async () => {
     // A Request can't carry userinfo, so the query string is what can leak.
-    const hook = createBeforeRequestHook(async () => {})
-    await hook({options: {} as NormalizedOptions, request: new Request('https://logs.heroku.com/s?token=s3cret&page=2')})
+    await createRequestLogHook()({request: new Request('https://logs.heroku.com/s?token=s3cret&page=2')})
 
-    const call = debugRequestSpy.mock.calls.find(([format]) => format === '%s %s')
-    expect(call?.[2]).toBe('https://logs.heroku.com/s?token=[REDACTED]&page=2')
+    expect(debugRequestSpy).toHaveBeenCalledWith('%s %s', 'GET', 'https://logs.heroku.com/s?token=[REDACTED]&page=2')
   })
 
-  it('does not log headers when the heroku:fetch:request namespace is disabled', async () => {
+  it('logs nothing when the heroku:fetch:request namespace is disabled', async () => {
     Object.assign(debugRequestSpy, {enabled: false})
-    const hook = createBeforeRequestHook(async () => 'super-secret-token')
-    const request = new Request('https://api.heroku.com/apps')
-
-    const headers = await loggedHeaders(hook, request)
-
-    expect(headers).toBeUndefined()
+    await createRequestLogHook()({request: new Request('https://api.heroku.com/apps')})
+    expect(debugRequestSpy).not.toHaveBeenCalled()
   })
 })
 

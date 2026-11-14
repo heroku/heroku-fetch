@@ -372,7 +372,7 @@ DEBUG=heroku:fetch:* node script.js
 
 | Namespace | Logs |
 | --- | --- |
-| `heroku:fetch:request` | Method, URL, and the (redacted) request headers |
+| `heroku:fetch:request` | Method, URL, and the (redacted) request headers, as sent: after your hooks run, and again for a 2FA replay |
 | `heroku:fetch:response` | Method, URL, and status |
 | `heroku:fetch:auth` | Client setup (service and base URL), token attachment, 2FA, and `reauthorize` events |
 | `heroku:fetch:error` | Parsed (redacted) error bodies |
