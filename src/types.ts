@@ -284,8 +284,6 @@ export interface RequestOptions {
   searchParams?: Record<string, boolean | number | string>;
   /** Aborts the in-flight request when the signal fires. */
   signal?: AbortSignal;
-  /** Enable streaming response */
-  stream?: boolean;
   /**
    * Overrides the client's {@link HerokuApiClientOptions.timeout} for this
    * request: milliseconds, or `false` for no limit. `0` rejects.
