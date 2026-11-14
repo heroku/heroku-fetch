@@ -17,8 +17,9 @@ import type {
   TokenProvider,
 } from '../types.js'
 
-import {debugAuth, debugRequest} from '../debug-loggers.js'
+import {debugAuth} from '../debug-loggers.js'
 import {AuthenticationError} from '../errors.js'
+import {redactUrl} from '../redact.js'
 import {
   create2FAAfterHook,
   createBeforeRequestHook,
@@ -112,7 +113,7 @@ export class HerokuApiClient {
     // validates the host env vars, and an unused one mustn't fail the client.
     const baseUrl = options.baseUrl || serviceConfig.baseUrl
 
-    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
+    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, redactUrl(baseUrl))
 
     // Stash the ky options; the actual ky instance is built lazily so
     // we can await getDefaultFetch() (Node loads undici dynamically for
@@ -183,7 +184,6 @@ export class HerokuApiClient {
    * Make a DELETE request
    */
   public async delete(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('DELETE %s', path)
     return this.request(path, {...options, method: 'DELETE'})
   }
 
@@ -191,7 +191,6 @@ export class HerokuApiClient {
    * Make a GET request
    */
   public async get(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('GET %s', path)
     return this.request(path, {...options, method: 'GET'})
   }
 
@@ -199,7 +198,6 @@ export class HerokuApiClient {
    * Make a PATCH request
    */
   public async patch(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('PATCH %s', path)
     return this.request(path, {...options, body, method: 'PATCH'})
   }
 
@@ -207,7 +205,6 @@ export class HerokuApiClient {
    * Make a POST request
    */
   public async post(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('POST %s', path)
     return this.request(path, {...options, body, method: 'POST'})
   }
 
@@ -215,7 +212,6 @@ export class HerokuApiClient {
    * Make a PUT request
    */
   public async put(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('PUT %s', path)
     return this.request(path, {...options, body, method: 'PUT'})
   }
 
@@ -257,8 +253,6 @@ export class HerokuApiClient {
    * Create a streaming request (returns the Response object for stream access)
    */
   public async stream(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('STREAM %s', path)
-
     const signal = combineSignals(this.options.signal, options?.signal)
     const kyOptions: KyOptions = {
       // Only set these when the caller supplied them: a literal `undefined`

@@ -9,6 +9,7 @@ import type {ResponseMetadata} from '../types.js'
 import * as debugLoggers from '../debug-loggers.js'
 import {
   createBeforeRequestHook,
+  createErrorAfterHook,
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
@@ -102,6 +103,15 @@ describe('createBeforeRequestHook', () => {
     expect(JSON.stringify(headers)).not.toContain('123456')
   })
 
+  it('redacts credentials in the logged request URL', async () => {
+    // A Request can't carry userinfo, so the query string is what can leak.
+    const hook = createBeforeRequestHook(async () => {})
+    await hook({options: {} as NormalizedOptions, request: new Request('https://logs.heroku.com/s?token=s3cret&page=2')})
+
+    const call = debugRequestSpy.mock.calls.find(([format]) => format === '%s %s')
+    expect(call?.[2]).toBe('https://logs.heroku.com/s?token=[REDACTED]&page=2')
+  })
+
   it('does not log headers when the heroku:fetch:request namespace is disabled', async () => {
     Object.assign(debugRequestSpy, {enabled: false})
     const hook = createBeforeRequestHook(async () => 'super-secret-token')
@@ -110,6 +120,22 @@ describe('createBeforeRequestHook', () => {
     const headers = await loggedHeaders(hook, request)
 
     expect(headers).toBeUndefined()
+  })
+})
+
+describe('createErrorAfterHook', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('redacts credentials in the logged response URL', async () => {
+    const spy = vi.spyOn(debugLoggers, 'debugResponse').mockImplementation(() => true)
+    Object.assign(spy, {enabled: true})
+    const request = new Request('https://logs.heroku.com/s?token=s3cret')
+
+    await createErrorAfterHook()({options: {} as NormalizedOptions, request, response: new Response('ok')})
+
+    expect(spy).toHaveBeenCalledWith('%s %s -> %d', 'GET', 'https://logs.heroku.com/s?token=[REDACTED]', 200)
   })
 })
 

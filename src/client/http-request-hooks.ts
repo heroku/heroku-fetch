@@ -10,7 +10,7 @@ import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
-import {logScrubbed} from '../redact.js'
+import {logScrubbed, redactUrl} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
@@ -50,7 +50,10 @@ export function createBeforeRequestHook(getToken: () => Promise<string | undefin
       debugAuth('Authorization header added')
     }
 
-    debugRequest('%s %s', request.method, request.url)
+    if (debugRequest.enabled) {
+      debugRequest('%s %s', request.method, redactUrl(request.url))
+    }
+
     await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }
@@ -202,7 +205,9 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
  */
 export function createErrorAfterHook(): AfterResponseHook {
   return async ({request, response}) => {
-    debugResponse('%s %s -> %d', request.method, request.url, response.status)
+    if (debugResponse.enabled) {
+      debugResponse('%s %s -> %d', request.method, redactUrl(request.url), response.status)
+    }
 
     if (!response.ok) {
       await handleErrorResponse(response)

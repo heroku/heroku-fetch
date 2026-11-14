@@ -66,9 +66,12 @@ function headersToObject(headers: Headers): Record<string, string> {
 
 /**
  * Clear credentials embedded in a URL (userinfo and sensitive query values),
- * keeping host/path. Returns the input unchanged if it isn't a parseable URL.
+ * keeping host/path. Returns the input unchanged if it isn't a string or a
+ * parseable absolute URL. Use this for any URL written to a log line: the
+ * Scrubber's patterns don't apply to a top-level string.
  */
-function redactUrl(url: unknown): unknown {
+export function redactUrl<T>(url: T): T
+export function redactUrl(url: unknown): unknown {
   if (typeof url !== 'string') return url
   try {
     const u = new URL(url)
@@ -80,7 +83,9 @@ function redactUrl(url: unknown): unknown {
       }
     }
 
-    return u.toString()
+    // The setters percent-encode the brackets; restore them so the log reads
+    // `token=[REDACTED]`.
+    return u.toString().replaceAll(encodeURIComponent(REPLACEMENT), REPLACEMENT)
   } catch {
     return url
   }

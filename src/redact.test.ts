@@ -2,7 +2,7 @@ import {
   describe, expect, it, vi,
 } from 'vitest'
 
-import {logScrubbed, scrubForLog} from './redact.js'
+import {logScrubbed, redactUrl, scrubForLog} from './redact.js'
 
 function makeLogger(enabled: boolean) {
   const logger = vi.fn() as unknown as {
@@ -215,5 +215,21 @@ describe('logScrubbed', () => {
     const [, status, payload] = logger.mock.calls[0] as [string, number, Record<string, unknown>]
     expect(status).toBe(500)
     expect(payload.secret).toBe('[REDACTED]')
+  })
+})
+
+describe('redactUrl', () => {
+  it('redacts userinfo and sensitive query values, keeping the rest readable', () => {
+    expect(redactUrl('https://user:pass@logs.heroku.com/sessions/abc?srv=1&token=s3cret&page=2'))
+      .toBe('https://[REDACTED]:[REDACTED]@logs.heroku.com/sessions/abc?srv=1&token=[REDACTED]&page=2')
+  })
+
+  it('leaves a URL without credentials unchanged', () => {
+    expect(redactUrl('https://api.heroku.com/apps?page=2')).toBe('https://api.heroku.com/apps?page=2')
+  })
+
+  it('passes through values it cannot parse', () => {
+    expect(redactUrl('/apps?token=x')).toBe('/apps?token=x')
+    expect(redactUrl(null)).toBeNull()
   })
 })
