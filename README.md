@@ -20,8 +20,8 @@ hand:
   headers across a session, and passes server `x-heroku-warning` headers to
   your code (deduplicated).
 - **Proxies on Node.** Honors `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`.
-- **Safe debug logging.** `DEBUG=heroku:fetch:*` traces requests with tokens
-  and other secrets redacted.
+- **Redacted debug logging.** `DEBUG=heroku:fetch:*` traces requests, with
+  tokens and other recognizable credentials redacted.
 
 For typed methods generated from the API schema, use
 [`@heroku/sdk`](https://github.com/heroku/heroku-sdk), which is built on this
@@ -366,11 +366,19 @@ generated and echoed so far by this client, newest first, capped at about 7 KB.
 Heroku support can use it to follow a multi-call operation from start to
 finish.
 
-**Debug logging** uses [`debug`](https://github.com/debug-js/debug). Values
-that are logged are scrubbed of tokens, `Authorization` values, and other
-credentials first. URLs keep their path, with credentials in the query string
-removed. A `custom` client logs only the URL's origin, because the URLs it
-calls (such as a log session's) can carry a credential in the path.
+**Debug logging** uses [`debug`](https://github.com/debug-js/debug). Logged
+values are scrubbed first: headers and fields whose names suggest a credential
+(`Authorization`, `*token*`, `*key*`, `*session*`, and similar), and values
+shaped like a Heroku token or a Bearer or Basic credential. Scrubbing goes by
+names and patterns, so a secret under an unrecognizable name isn't caught.
+
+URLs keep their path, with userinfo and credential-like query values removed.
+A path segment that is itself a secret, such as the token in
+`/teams/invitations/{token}`, is logged as is. A `custom` client logs only the
+URL's origin, because the URLs it calls (such as a log session's) often carry
+a credential in the path.
+
+Review debug output before sharing it.
 
 ```bash
 DEBUG=heroku:fetch:* node script.js
