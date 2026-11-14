@@ -236,6 +236,8 @@ having no handler, surfaces as `TwoFactorRequiredError`.
 - **Node default:** a masked terminal prompt
   (`cliTwoFactorPrompt`, via `@heroku/heroku-cli-util`).
 - **Browser default:** no handler.
+- **`custom` clients:** no handler unless you pass one, so a 2FA code is only
+  sent to a host you chose to send it to.
 - **Custom:**
 
 ```typescript

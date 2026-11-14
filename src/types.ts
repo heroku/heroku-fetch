@@ -238,7 +238,11 @@ export interface HerokuApiClientOptions {
    * explicitly to authenticate a `custom` client.
    */
   token?: TokenProvider;
-  /** Two-factor authentication configuration */
+  /**
+   * Answers 2FA challenges by asking for a code and replaying the request with
+   * it. Omitted → named services use the environment default (a terminal prompt
+   * on Node, none in the browser); `custom` clients don't answer challenges.
+   */
   twoFactor?: TwoFactorOptions;
   /**
    * Identifies this client's traffic with a `User-Agent` header, assembled from

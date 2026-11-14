@@ -13,6 +13,7 @@ import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
   HerokuApiClientOptions,
+  HerokuService,
   RequestOptions,
   TokenProvider,
 } from '../types.js'
@@ -66,6 +67,23 @@ function checkTimeout<T extends false | number | undefined>(timeout: T): T {
   return timeout
 }
 
+/**
+ * The token and 2FA handler a client uses. Named Heroku services fall back to
+ * the environment's defaults: a token provider (HEROKU_API_KEY on Node) and a
+ * 2FA handler. A `custom` client may point at a host outside Heroku, so it
+ * sends a token or a 2FA code only when given a token or handler explicitly.
+ */
+function authDefaults(
+  service: HerokuService,
+  options: HerokuApiClientOptions,
+): Pick<HerokuApiClientOptions, 'token' | 'twoFactor'> {
+  if (service === 'custom') return {token: options.token, twoFactor: options.twoFactor}
+  return {
+    token: options.token ?? getDefaultTokenProvider(),
+    twoFactor: options.twoFactor ?? getDefaultTwoFactorOptions(),
+  }
+}
+
 export class HerokuApiClient {
   private clientPromise: null | Promise<KyInstance> = null
   private kyOptions: KyOptions
@@ -89,19 +107,9 @@ export class HerokuApiClient {
       timeout: checkTimeout(options.timeout) ?? DEFAULT_TIMEOUT,
     }
 
-    // With no token, named Heroku services fall back to the environment's default
-    // provider (HEROKU_API_KEY on Node). A `custom` client may point at a host
-    // outside Heroku, so it sends a token only when one is passed explicitly.
-    if (options.token !== undefined) {
-      this.tokenProvider = options.token
-    } else if (this.options.service !== 'custom') {
-      this.tokenProvider = getDefaultTokenProvider()
-    }
-
-    // If no twoFactor provided, use default 2FA handler
-    if (!options.twoFactor) {
-      this.options.twoFactor = getDefaultTwoFactorOptions()
-    }
+    const auth = authDefaults(this.options.service, options)
+    this.tokenProvider = auth.token
+    this.options.twoFactor = auth.twoFactor
 
     // Determine base URL
     const serviceConfig = SERVICE_CONFIGS[this.options.service]

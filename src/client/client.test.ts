@@ -717,6 +717,20 @@ describe('HerokuApiClient', () => {
       expect(requests).toHaveLength(2)
       expect(requests[1].twoFactorCode).toBe('wrong')
     })
+
+    it('does not answer a challenge for a custom client with no twoFactor handler', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom', token: 'test'})
+
+      await expect(client.get('/account')).rejects.toBeInstanceOf(TwoFactorRequiredError)
+      expect(requests).toHaveLength(1)
+    })
+
+    it('gives named services the default handler but not custom clients', () => {
+      const twoFactorOf = (c: HerokuApiClient) => (c as unknown as {options: {twoFactor?: unknown}}).options.twoFactor
+
+      expect(twoFactorOf(new HerokuApiClient({baseUrl, token: 'test'}))).toBeDefined()
+      expect(twoFactorOf(new HerokuApiClient({baseUrl, service: 'custom', token: 'test'}))).toBeUndefined()
+    })
   })
 
   describe('reauthorize retry (end-to-end)', () => {
