@@ -93,9 +93,12 @@ What the ordering means for you:
 - Your `afterResponse` hooks, `warn`, and `onResponseMetadata` only see
   **successful** responses, because errors have already been thrown by the
   time they run.
-- The client does not retry automatically, apart from the single 2FA replay
-  and the single `reauthorize` retry. A 5xx or 429 is thrown on the first
-  attempt.
+- A `GET` (including `stream()`) that fails with a network error, such as a refused
+  connection, DNS failure or reset connection, is retried up to 3 times, after
+  300, 600 and 1200 ms. Other methods aren't retried, because the server may
+  have acted before the connection dropped. Timeouts, 5xx and 429 responses
+  are thrown on the first attempt. Apart from that, the only retries are the
+  single 2FA replay and the single `reauthorize` retry.
 
 ### Entry points
 

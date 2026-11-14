@@ -54,6 +54,31 @@ function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | 
 
 const DEFAULT_TIMEOUT = 30_000
 
+/** How many times a GET is retried after a network error. */
+const NETWORK_RETRIES = 3
+
+/**
+ * ky's retry settings. A GET (including `stream()`) that fails with a network error (refused
+ * connection, DNS failure, reset) is retried up to {@link NETWORK_RETRIES}
+ * times, after 300, 600 and 1200 ms. Other methods aren't retried, because the
+ * server may have acted before the connection dropped. Timeouts and error
+ * responses aren't retried either.
+ *
+ * ky counts the 2FA replay as a retry but doesn't ask `shouldRetry` about it,
+ * so the limit has one slot more than `shouldRetry` allows network retries.
+ * That way the replay still runs after the network retries are used up.
+ */
+const RETRY: NonNullable<KyOptions['retry']> = {
+  delay: attempt => 300 * (2 ** (attempt - 1)),
+  limit: NETWORK_RETRIES + 1,
+  methods: ['get'],
+  retryOnTimeout: false,
+  shouldRetry({retryCount}) {
+    if (retryCount > NETWORK_RETRIES) return false
+  },
+  statusCodes: [],
+}
+
 /** The longest delay `setTimeout` accepts; ky rejects anything larger. */
 const MAX_TIMEOUT = 2_147_483_647
 
@@ -194,10 +219,11 @@ export class HerokuApiClient {
           // Logged last, so the log shows the request as it is sent.
           requestLog,
         ],
-        // A 2FA replay goes through ky's retry, which skips beforeRequest.
+        // Retries, including the 2FA replay, skip beforeRequest.
         beforeRetry: [requestLog],
       },
       prefix: baseUrl,
+      retry: RETRY,
       timeout: this.options.timeout,
     }
   }

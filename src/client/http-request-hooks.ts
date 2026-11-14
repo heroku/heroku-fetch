@@ -56,8 +56,9 @@ export function createBeforeRequestHook(getToken: () => Promise<string | undefin
  * Create a hook that logs the request as sent: method, redacted URL, and
  * scrubbed headers on `heroku:fetch:request`. Registered last in
  * `beforeRequest`, after the consumer hooks, so it shows `Request-Id` and any
- * header a hook added or replaced; and in `beforeRetry`, so the 2FA replay
- * (sent through ky's retry, which skips `beforeRequest`) is logged too.
+ * header a hook added or replaced; and in `beforeRetry`, so network retries and
+ * the 2FA replay (sent through ky's retry, which skips `beforeRequest`) are
+ * logged too.
  */
 export function createRequestLogHook(loggedUrl: LoggedUrl = 'full'): (state: {request: Request}) => Promise<void> {
   return async ({request}) => {
