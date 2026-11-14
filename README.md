@@ -315,7 +315,7 @@ Every non-2xx response is thrown as one of these classes:
 | --- | --- | --- |
 | `AuthenticationError` | 401 | |
 | `NotFoundError` | 404 | |
-| `RateLimitError` | 429 | `retryAfter` (seconds, from `Retry-After`) |
+| `RateLimitError` | 429 | `retryAfter`: seconds to wait, from a `Retry-After` given in seconds or as a date; `undefined` if absent or unrecognized |
 | `TwoFactorRequiredError` | 412, or 403 with id `two_factor`, that wasn't resolved | |
 | `HerokuApiError` | any other non-2xx; base class of all the above | |
 
