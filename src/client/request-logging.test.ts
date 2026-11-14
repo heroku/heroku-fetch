@@ -84,6 +84,14 @@ describe('request logging (heroku:fetch:request)', () => {
     for (const url of urls) expect(url).toBe(`${baseUrl}/[REDACTED]`)
   })
 
+  it('logs only the origin of a custom client\'s base URL at setup', () => {
+    const debugAuthSpy = vi.spyOn(debugLoggers, 'debugAuth').mockImplementation(() => true)
+
+    new HerokuApiClient({baseUrl: `${baseUrl}/sessions/session-secret`, service: 'custom'})
+
+    expect(debugAuthSpy).toHaveBeenCalledWith(expect.stringContaining('baseUrl'), 'custom', `${baseUrl}/[REDACTED]`)
+  })
+
   it('keeps the path for a named service', async () => {
     const client = new HerokuApiClient({baseUrl, token: 'secret-token', twoFactor: {onChallenge: () => '123456'}})
 

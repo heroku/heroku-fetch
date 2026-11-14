@@ -3,7 +3,7 @@ import {
 } from 'vitest'
 
 import {
-  logScrubbed, redactUrl, redactUrlPath, scrubForLog,
+  logScrubbed, logScrubbedFor, redactUrl, redactUrlPath, scrubForLog,
 } from './redact.js'
 
 function makeLogger(enabled: boolean) {
@@ -149,6 +149,37 @@ describe('scrubForLog', () => {
     expect(result.response.url).not.toContain('abc')
   })
 
+  it('shows only the origin of URLs in an error, its message, and its cause, for origin logging', async () => {
+    const url = 'https://logplex.example.com/sessions/session-secret?srv=1'
+    const cause = Object.assign(new Error(`Request failed: GET ${url}`), {request: {method: 'GET', url}})
+    const error = Object.assign(new Error(`Request failed: GET ${url}`, {cause}), {
+      request: {method: 'GET', url},
+      response: {status: 500, statusText: 'Server Error', url},
+    })
+
+    const result = await scrubForLog(error, 'origin')
+
+    expect(JSON.stringify(result)).not.toContain('session-secret')
+    expect(result).toMatchObject({
+      cause: {message: 'Request failed: GET https://logplex.example.com/[REDACTED]'},
+      message: 'Request failed: GET https://logplex.example.com/[REDACTED]',
+      request: {url: 'https://logplex.example.com/[REDACTED]'},
+      response: {url: 'https://logplex.example.com/[REDACTED]'},
+    })
+  })
+
+  it('keeps the path of URLs in an error by default', async () => {
+    const url = 'https://api.heroku.com/apps/my-app?token=abc'
+    const error = Object.assign(new Error(`Request failed: GET ${url}`), {request: {method: 'GET', url}})
+
+    const result = await scrubForLog(error)
+
+    expect(result).toMatchObject({
+      message: 'Request failed: GET https://api.heroku.com/apps/my-app?token=[REDACTED]',
+      request: {url: 'https://api.heroku.com/apps/my-app?token=[REDACTED]'},
+    })
+  })
+
   it('caps cyclic cause recursion without crashing', async () => {
     const a = new Error('a') as Error & {cause?: unknown}
     const b = new Error('b') as Error & {cause?: unknown}
@@ -217,6 +248,20 @@ describe('logScrubbed', () => {
     const [, status, payload] = logger.mock.calls[0] as [string, number, Record<string, unknown>]
     expect(status).toBe(500)
     expect(payload.secret).toBe('[REDACTED]')
+  })
+})
+
+describe('logScrubbedFor', () => {
+  it('shows URLs in logged errors in the given form', async () => {
+    const logger = makeLogger(true)
+    const url = 'https://logplex.example.com/sessions/session-secret'
+    const error = Object.assign(new Error('failed'), {request: {method: 'GET', url}})
+
+    await logScrubbedFor('origin', logger, 'error: %O', error)
+
+    expect(logger).toHaveBeenCalledWith('error: %O', expect.objectContaining({
+      request: {method: 'GET', url: 'https://logplex.example.com/[REDACTED]'},
+    }))
   })
 })
 

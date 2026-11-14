@@ -105,12 +105,24 @@ export function redactUrlPath(url: string): string {
 }
 
 /**
+ * How URLs appear in log lines. `full` keeps the path and redacts credentials
+ * in the query and userinfo. `origin` drops the path too, for `custom` clients:
+ * they call URLs the API handed back, whose path can itself be a credential.
+ */
+export type LoggedUrl = 'full' | 'origin'
+
+/** Redact `url` for a log line, as {@link redactUrl} or {@link redactUrlPath}. */
+export function redactUrlForLog(url: string, loggedUrl: LoggedUrl): string {
+  return loggedUrl === 'origin' ? redactUrlPath(url) : redactUrl(url)
+}
+
+/**
  * Normalize an `Error` into a plain, scrubbable object. An Error's own
  * `name`/`message`/`stack`/`cause` are non-enumerable and would otherwise be
  * dropped. Nested `Request`/`Response` are summarized rather than passed
  * through: they serialize to `{}` and a `Request` can carry live auth headers.
  */
-async function scrubError(error: Error, depth: number): Promise<unknown> {
+async function scrubError(error: Error, loggedUrl: LoggedUrl, depth: number): Promise<unknown> {
   const scrubber = await getScrubber()
   // Index signature makes the extra own-properties `unknown` without flattening
   // the known `message`/`name`/`stack` off `Error` (string wins over unknown).
@@ -124,25 +136,34 @@ async function scrubError(error: Error, depth: number): Promise<unknown> {
     cause, message, name, request, response, stack, ...rest
   } = err
 
+  const req = typeof request === 'object' && request ? request as {method?: unknown; url?: unknown} : undefined
+  const res = typeof response === 'object' && response
+    ? response as {status?: unknown; statusText?: unknown; url?: unknown}
+    : undefined
+  const urls = [req?.url, res?.url].filter((url): url is string => typeof url === 'string')
+
+  // ky's error messages (and so the stack) embed the request URL. Swap each
+  // known URL for its logged form so `origin` holds for those strings too.
+  const withLoggedUrls = (text: string | undefined): string | undefined => {
+    let result = text
+    for (const url of urls) result = result?.replaceAll(url, redactUrlForLog(url, loggedUrl))
+    return result
+  }
+
+  const loggedUrlOf = (url: unknown): unknown => (typeof url === 'string' ? redactUrlForLog(url, loggedUrl) : url)
+
   const normalized: Record<string, unknown> = {
-    message, name, stack, ...rest,
+    message: withLoggedUrls(message), name, stack: withLoggedUrls(stack), ...rest,
   }
 
-  if (response && typeof response === 'object') {
-    const r = response as {status?: unknown; statusText?: unknown; url?: unknown}
-    normalized.response = {status: r.status, statusText: r.statusText, url: redactUrl(r.url)}
-  }
-
-  if (request && typeof request === 'object') {
-    const r = request as {method?: unknown; url?: unknown}
-    normalized.request = {method: r.method, url: redactUrl(r.url)}
-  }
+  if (res) normalized.response = {status: res.status, statusText: res.statusText, url: loggedUrlOf(res.url)}
+  if (req) normalized.request = {method: req.method, url: loggedUrlOf(req.url)}
 
   const scrubbed = scrubber.scrub(normalized).data
   if (cause !== undefined) {
     scrubbed.cause = depth >= MAX_CAUSE_DEPTH
       ? '[max cause depth exceeded]'
-      : await scrubForLog(cause, depth + 1)
+      : await scrubValue(cause, loggedUrl, depth + 1)
   }
 
   return scrubbed
@@ -152,13 +173,17 @@ async function scrubError(error: Error, depth: number): Promise<unknown> {
  * Scrub a value for debug logging. Handles `Error`, `Headers`, plain objects,
  * and primitives (passed through unchanged — a top-level string is not
  * pattern-scrubbed; `CREDENTIAL_PATTERNS` only apply to strings nested inside
- * a scrubbed object/Error). Fail-closed: any failure returns `'[unscrubbable]'`
- * rather than risking the raw value. `depth` is internal, for `cause`
- * recursion.
+ * a scrubbed object/Error). URLs on a logged error's request and response, and
+ * in its message, are shown as `loggedUrl`. Fail-closed: any failure returns
+ * `'[unscrubbable]'` rather than risking the raw value.
  */
-export async function scrubForLog(value: unknown, depth = 0): Promise<unknown> {
+export async function scrubForLog(value: unknown, loggedUrl: LoggedUrl = 'full'): Promise<unknown> {
+  return scrubValue(value, loggedUrl, 0)
+}
+
+async function scrubValue(value: unknown, loggedUrl: LoggedUrl, depth: number): Promise<unknown> {
   try {
-    if (value instanceof Error) return await scrubError(value, depth)
+    if (value instanceof Error) return await scrubError(value, loggedUrl, depth)
     if (typeof Headers !== 'undefined' && value instanceof Headers) {
       const scrubber = await getScrubber()
       return scrubber.scrub(headersToObject(value)).data
@@ -191,7 +216,17 @@ export async function logScrubbed(
   formatter: string,
   ...values: unknown[]
 ): Promise<void> {
+  await logScrubbedFor('full', logger, formatter, ...values)
+}
+
+/** {@link logScrubbed}, showing URLs in logged errors as `loggedUrl`. */
+export async function logScrubbedFor(
+  loggedUrl: LoggedUrl,
+  logger: DebugLike,
+  formatter: string,
+  ...values: unknown[]
+): Promise<void> {
   if (!logger.enabled) return
-  const scrubbed = await Promise.all(values.map(value => scrubForLog(value)))
+  const scrubbed = await Promise.all(values.map(value => scrubForLog(value, loggedUrl)))
   logger(formatter, ...scrubbed)
 }

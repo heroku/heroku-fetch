@@ -19,7 +19,7 @@ import type {
 
 import {debugAuth} from '../debug-loggers.js'
 import {AuthenticationError} from '../errors.js'
-import {redactUrl} from '../redact.js'
+import {type LoggedUrl, redactUrlForLog} from '../redact.js'
 import {
   create2FAAfterHook,
   createBeforeRequestHook,
@@ -114,7 +114,10 @@ export class HerokuApiClient {
     // validates the host env vars, and an unused one mustn't fail the client.
     const baseUrl = options.baseUrl || serviceConfig.baseUrl
 
-    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, redactUrl(baseUrl))
+    // A `custom` client calls URLs such as a log session's, whose path can be
+    // the credential, so its log lines show only the origin.
+    const loggedUrl: LoggedUrl = this.options.service === 'custom' ? 'origin' : 'full'
+    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, redactUrlForLog(baseUrl, loggedUrl))
 
     // Stash the ky options; the actual ky instance is built lazily so
     // we can await getDefaultFetch() (Node loads undici dynamically for
@@ -148,9 +151,6 @@ export class HerokuApiClient {
       }
     }
 
-    // A `custom` client calls URLs such as a log session's, whose path can be
-    // the credential, so its log lines show only the origin.
-    const loggedUrl = this.options.service === 'custom' ? 'origin' : 'full'
     const requestLog = createRequestLogHook(loggedUrl)
     this.kyOptions = {
       headers,
@@ -160,7 +160,7 @@ export class HerokuApiClient {
         // throws on a non-ok response — so the Request-Id tracking, warning, and
         // metadata hooks after it run only on the success path.
         afterResponse: [
-          create2FAAfterHook(this.options.twoFactor),
+          create2FAAfterHook(this.options.twoFactor, loggedUrl),
           createErrorAfterHook(loggedUrl),
           createRequestIdAfterHook(this.requestIds),
           createWarningAfterHook(

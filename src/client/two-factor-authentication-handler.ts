@@ -9,7 +9,7 @@ import ky from 'ky'
 import type {HerokuErrorResponse, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugError} from '../debug-loggers.js'
-import {logScrubbed} from '../redact.js'
+import {type LoggedUrl, logScrubbedFor} from '../redact.js'
 
 /**
  * Check if a 403 response is a 2FA error by checking the error id
@@ -50,6 +50,7 @@ export async function is2FAError(response: Response): Promise<boolean> {
 export async function handle2FAChallenge(
   request: Request,
   twoFactorOptions: TwoFactorOptions,
+  loggedUrl: LoggedUrl = 'full',
 ): Promise<ReturnType<typeof ky.retry>> {
   debugAuth('2FA challenge detected, invoking callback')
 
@@ -62,7 +63,7 @@ export async function handle2FAChallenge(
 
     return ky.retry({code: 'TWO_FACTOR', request: new Request(request, {headers})})
   } catch (error) {
-    await logScrubbed(debugError, '2FA retry failed: %O', error)
+    await logScrubbedFor(loggedUrl, debugError, '2FA retry failed: %O', error)
     throw error
   }
 }

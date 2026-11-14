@@ -10,7 +10,7 @@ import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
-import {logScrubbed, redactUrl, redactUrlPath} from '../redact.js'
+import {type LoggedUrl, logScrubbed, redactUrlForLog} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
@@ -22,17 +22,6 @@ import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handle
  * set without limit.
  */
 const MAX_SHOWN_WARNINGS = 256
-
-/**
- * How URLs appear in log lines. `full` keeps the path and redacts credentials
- * in the query and userinfo. `origin` drops the path too, for `custom` clients:
- * they call URLs the API handed back, whose path can itself be a credential.
- */
-export type LoggedUrl = 'full' | 'origin'
-
-function urlForLog(url: string, loggedUrl: LoggedUrl): string {
-  return loggedUrl === 'origin' ? redactUrlPath(url) : redactUrl(url)
-}
 
 /**
  * Create a beforeRequest hook that attaches the bearer token.
@@ -74,7 +63,7 @@ export function createRequestLogHook(loggedUrl: LoggedUrl = 'full'): (state: {re
   return async ({request}) => {
     if (!debugRequest.enabled) return
 
-    debugRequest('%s %s', request.method, urlForLog(request.url, loggedUrl))
+    debugRequest('%s %s', request.method, redactUrlForLog(request.url, loggedUrl))
     await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }
@@ -198,7 +187,7 @@ function normalizedWarning(response: Response): string | undefined {
  * client don't interfere. Returns the original response untouched when it isn't
  * a handleable 2FA challenge.
  */
-export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined): AfterResponseHook {
+export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined, loggedUrl: LoggedUrl = 'full'): AfterResponseHook {
   return async ({request, response}) => {
     // Cheap guards first, so the body-reading is2FAError() probe below is only
     // reached when it can matter: skip when no 2FA handler is configured, or
@@ -211,7 +200,7 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
       || (response.status === 403 && await is2FAError(response))
 
     if (is2FAChallenge) {
-      return handle2FAChallenge(request, twoFactorOptions)
+      return handle2FAChallenge(request, twoFactorOptions, loggedUrl)
     }
 
     return response
@@ -227,7 +216,7 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
 export function createErrorAfterHook(loggedUrl: LoggedUrl = 'full'): AfterResponseHook {
   return async ({request, response}) => {
     if (debugResponse.enabled) {
-      debugResponse('%s %s -> %d', request.method, urlForLog(request.url, loggedUrl), response.status)
+      debugResponse('%s %s -> %d', request.method, redactUrlForLog(request.url, loggedUrl), response.status)
     }
 
     if (!response.ok) {
