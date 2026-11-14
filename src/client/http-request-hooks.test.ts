@@ -107,6 +107,12 @@ describe('createRequestLogHook', () => {
     expect(debugRequestSpy).toHaveBeenCalledWith('%s %s', 'GET', 'https://logs.heroku.com/s?token=[REDACTED]&page=2')
   })
 
+  it('logs only the origin when asked to', async () => {
+    await createRequestLogHook('origin')({request: new Request('https://logplex.heroku.com/sessions/abc?srv=1')})
+
+    expect(debugRequestSpy).toHaveBeenCalledWith('%s %s', 'GET', 'https://logplex.heroku.com/[REDACTED]')
+  })
+
   it('logs nothing when the heroku:fetch:request namespace is disabled', async () => {
     Object.assign(debugRequestSpy, {enabled: false})
     await createRequestLogHook()({request: new Request('https://api.heroku.com/apps')})
@@ -127,6 +133,16 @@ describe('createErrorAfterHook', () => {
     await createErrorAfterHook()({options: {} as NormalizedOptions, request, response: new Response('ok')})
 
     expect(spy).toHaveBeenCalledWith('%s %s -> %d', 'GET', 'https://logs.heroku.com/s?token=[REDACTED]', 200)
+  })
+
+  it('logs only the origin of the response URL when asked to', async () => {
+    const spy = vi.spyOn(debugLoggers, 'debugResponse').mockImplementation(() => true)
+    Object.assign(spy, {enabled: true})
+    const request = new Request('https://logplex.heroku.com/sessions/abc')
+
+    await createErrorAfterHook('origin')({options: {} as NormalizedOptions, request, response: new Response('ok')})
+
+    expect(spy).toHaveBeenCalledWith('%s %s -> %d', 'GET', 'https://logplex.heroku.com/[REDACTED]', 200)
   })
 })
 

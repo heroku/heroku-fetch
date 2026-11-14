@@ -69,4 +69,26 @@ describe('request logging (heroku:fetch:request)', () => {
     expect(JSON.stringify(logged)).not.toContain('123456')
     expect(JSON.stringify(logged)).not.toContain('secret-token')
   })
+
+  it('logs only the origin for a custom client, whose path can be a credential', async () => {
+    const debugResponseSpy = vi.spyOn(debugLoggers, 'debugResponse').mockImplementation(() => true)
+    Object.assign(debugResponseSpy, {enabled: true})
+    const client = new HerokuApiClient({baseUrl, service: 'custom', twoFactor: {onChallenge: () => '123456'}})
+
+    await client.stream('/sessions/session-secret?srv=1')
+
+    const urls = [...debugRequestSpy.mock.calls, ...debugResponseSpy.mock.calls]
+      .filter(([format]) => String(format).startsWith('%s %s'))
+      .map(call => call[2])
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) expect(url).toBe(`${baseUrl}/[REDACTED]`)
+  })
+
+  it('keeps the path for a named service', async () => {
+    const client = new HerokuApiClient({baseUrl, token: 'secret-token', twoFactor: {onChallenge: () => '123456'}})
+
+    await client.get('/apps/my-app')
+
+    expect(debugRequestSpy).toHaveBeenCalledWith('%s %s', 'GET', `${baseUrl}/apps/my-app`)
+  })
 })

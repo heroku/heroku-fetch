@@ -92,6 +92,19 @@ export function redactUrl(url: unknown): unknown {
 }
 
 /**
+ * Reduce `url` to its origin, for hosts whose paths can carry a credential,
+ * such as a log session URL (`/sessions/<id>`). Returns only the replacement
+ * if `url` isn't a parseable absolute URL.
+ */
+export function redactUrlPath(url: string): string {
+  try {
+    return `${new URL(url).origin}/${REPLACEMENT}`
+  } catch {
+    return REPLACEMENT
+  }
+}
+
+/**
  * Normalize an `Error` into a plain, scrubbable object. An Error's own
  * `name`/`message`/`stack`/`cause` are non-enumerable and would otherwise be
  * dropped. Nested `Request`/`Response` are summarized rather than passed

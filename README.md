@@ -364,7 +364,9 @@ finish.
 
 **Debug logging** uses [`debug`](https://github.com/debug-js/debug). Values
 that are logged are scrubbed of tokens, `Authorization` values, and other
-credentials first.
+credentials first. URLs keep their path, with credentials in the query string
+removed. A `custom` client logs only the URL's origin, because the URLs it
+calls (such as a log session's) can carry a credential in the path.
 
 ```bash
 DEBUG=heroku:fetch:* node script.js

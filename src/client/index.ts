@@ -148,7 +148,10 @@ export class HerokuApiClient {
       }
     }
 
-    const requestLog = createRequestLogHook()
+    // A `custom` client calls URLs such as a log session's, whose path can be
+    // the credential, so its log lines show only the origin.
+    const loggedUrl = this.options.service === 'custom' ? 'origin' : 'full'
+    const requestLog = createRequestLogHook(loggedUrl)
     this.kyOptions = {
       headers,
       hooks: {
@@ -158,7 +161,7 @@ export class HerokuApiClient {
         // metadata hooks after it run only on the success path.
         afterResponse: [
           create2FAAfterHook(this.options.twoFactor),
-          createErrorAfterHook(),
+          createErrorAfterHook(loggedUrl),
           createRequestIdAfterHook(this.requestIds),
           createWarningAfterHook(
             this.shownWarnings,

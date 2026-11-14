@@ -2,7 +2,9 @@ import {
   describe, expect, it, vi,
 } from 'vitest'
 
-import {logScrubbed, redactUrl, scrubForLog} from './redact.js'
+import {
+  logScrubbed, redactUrl, redactUrlPath, scrubForLog,
+} from './redact.js'
 
 function makeLogger(enabled: boolean) {
   const logger = vi.fn() as unknown as {
@@ -231,5 +233,16 @@ describe('redactUrl', () => {
   it('passes through values it cannot parse', () => {
     expect(redactUrl('/apps?token=x')).toBe('/apps?token=x')
     expect(redactUrl(null)).toBeNull()
+  })
+})
+
+describe('redactUrlPath', () => {
+  it('keeps only the origin', () => {
+    expect(redactUrlPath('https://logplex.heroku.com/sessions/01234567-89ab?srv=1325419200'))
+      .toBe('https://logplex.heroku.com/[REDACTED]')
+  })
+
+  it('returns only the replacement for a value it cannot parse', () => {
+    expect(redactUrlPath('/sessions/abc')).toBe('[REDACTED]')
   })
 })

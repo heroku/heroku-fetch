@@ -10,7 +10,7 @@ import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
-import {logScrubbed, redactUrl} from '../redact.js'
+import {logScrubbed, redactUrl, redactUrlPath} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
@@ -22,6 +22,17 @@ import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handle
  * set without limit.
  */
 const MAX_SHOWN_WARNINGS = 256
+
+/**
+ * How URLs appear in log lines. `full` keeps the path and redacts credentials
+ * in the query and userinfo. `origin` drops the path too, for `custom` clients:
+ * they call URLs the API handed back, whose path can itself be a credential.
+ */
+export type LoggedUrl = 'full' | 'origin'
+
+function urlForLog(url: string, loggedUrl: LoggedUrl): string {
+  return loggedUrl === 'origin' ? redactUrlPath(url) : redactUrl(url)
+}
 
 /**
  * Create a beforeRequest hook that attaches the bearer token.
@@ -59,11 +70,11 @@ export function createBeforeRequestHook(getToken: () => Promise<string | undefin
  * header a hook added or replaced; and in `beforeRetry`, so the 2FA replay
  * (sent through ky's retry, which skips `beforeRequest`) is logged too.
  */
-export function createRequestLogHook(): (state: {request: Request}) => Promise<void> {
+export function createRequestLogHook(loggedUrl: LoggedUrl = 'full'): (state: {request: Request}) => Promise<void> {
   return async ({request}) => {
     if (!debugRequest.enabled) return
 
-    debugRequest('%s %s', request.method, redactUrl(request.url))
+    debugRequest('%s %s', request.method, urlForLog(request.url, loggedUrl))
     await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }
@@ -213,10 +224,10 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
  * Registered before the Request-Id, warning, metadata, and consumer hooks, so
  * those run only on the success path (this throws and stops the chain first).
  */
-export function createErrorAfterHook(): AfterResponseHook {
+export function createErrorAfterHook(loggedUrl: LoggedUrl = 'full'): AfterResponseHook {
   return async ({request, response}) => {
     if (debugResponse.enabled) {
-      debugResponse('%s %s -> %d', request.method, redactUrl(request.url), response.status)
+      debugResponse('%s %s -> %d', request.method, urlForLog(request.url, loggedUrl), response.status)
     }
 
     if (!response.ok) {
