@@ -22,20 +22,31 @@
 const DEFAULT_MESSAGE = 'Enter your 2FA code'
 
 /**
+ * Node's error when `@heroku/heroku-cli-util` itself can't be found. Node quotes
+ * the missing specifier, then names the importing file, so a dependency missing
+ * from cli-util's own install (`Cannot find package 'x' imported from
+ * .../@heroku/heroku-cli-util/...`) doesn't match.
+ */
+const CLI_UTIL_NOT_FOUND = /^Cannot find (?:module|package) '@heroku\/heroku-cli-util(?:\/[^']*)?'/
+
+/**
  * Prompt for a 2FA code with masked input via heroku-cli-util's `hux.prompt`.
  * Only the import is guarded: a missing `@heroku/heroku-cli-util` becomes an
- * actionable install error naming `caller`, while errors from the prompt
- * itself propagate unchanged.
+ * actionable install error naming `caller`, with Node's error as its `cause`.
+ * Any other import failure, and errors from the prompt itself, propagate
+ * unchanged.
  */
 async function promptForCode(message: string, caller: string): Promise<string> {
   let prompt: typeof import('@heroku/heroku-cli-util/hux').prompt
   try {
     ({prompt} = await import('@heroku/heroku-cli-util/hux'))
   } catch (error) {
-    const {code} = error as {code?: unknown}
-    if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') {
+    const {code, message: errorMessage} = error as {code?: unknown; message?: unknown}
+    const missing = (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND')
+      && typeof errorMessage === 'string' && CLI_UTIL_NOT_FOUND.test(errorMessage)
+    if (missing) {
       throw new Error(`${caller} requires @heroku/heroku-cli-util to be installed. `
-        + 'Please run: npm install @heroku/heroku-cli-util')
+        + 'Please run: npm install @heroku/heroku-cli-util', {cause: error})
     }
 
     throw error

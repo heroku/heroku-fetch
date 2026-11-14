@@ -57,31 +57,57 @@ describe('CLI Two-Factor Prompt', () => {
     })
   })
 
+  it('does not import @heroku/heroku-cli-util until a prompt runs', async () => {
+    const factory = vi.fn(() => ({prompt}))
+    vi.doMock(HUX, factory)
+
+    const {cliTwoFactorPrompt} = await loadModule()
+    expect(factory).not.toHaveBeenCalled()
+
+    prompt.mockResolvedValue('123456')
+    await cliTwoFactorPrompt()
+    expect(factory).toHaveBeenCalledOnce()
+  })
+
+  // Vitest wraps errors thrown from a mock factory (dropping `code`), so these
+  // raise Node's error from the export accessor instead; it's read inside the
+  // same guarded import.
+  const failImport = (message: string) => {
+    const error = Object.assign(new Error(message), {code: 'ERR_MODULE_NOT_FOUND'})
+    vi.doMock(HUX, () => ({
+      get prompt() {
+        throw error
+      },
+    }))
+    return error
+  }
+
   describe('when @heroku/heroku-cli-util is not installed', () => {
+    let notFound: Error
+
     beforeEach(() => {
-      // Vitest wraps errors thrown from a mock factory (dropping `code`), so
-      // raise Node's missing-package error from the export accessor instead;
-      // it's read inside the same guarded import.
-      vi.doMock(HUX, () => ({
-        get prompt() {
-          throw Object.assign(new Error(`Cannot find package '${HUX}'`), {code: 'ERR_MODULE_NOT_FOUND'})
-        },
-      }))
+      notFound = failImport("Cannot find package '@heroku/heroku-cli-util' imported from /app/dist/cli/cli-two-factor-prompt.js")
     })
 
-    it('loads the module without importing the prompt', async () => {
-      const module = await loadModule()
-      expect(typeof module.cliTwoFactorPrompt).toBe('function')
-    })
-
-    it('cliTwoFactorPrompt throws an install hint', async () => {
+    it('cliTwoFactorPrompt throws an install hint, caused by the import error', async () => {
       const {cliTwoFactorPrompt} = await loadModule()
-      await expect(cliTwoFactorPrompt()).rejects.toThrow('cliTwoFactorPrompt requires @heroku/heroku-cli-util to be installed')
+      const error = await cliTwoFactorPrompt().catch((error_: unknown) => error_)
+      expect(error).toMatchObject({
+        cause: notFound,
+        message: expect.stringContaining('cliTwoFactorPrompt requires @heroku/heroku-cli-util to be installed'),
+      })
     })
 
     it('createCliTwoFactorPrompt throws an install hint', async () => {
       const {createCliTwoFactorPrompt} = await loadModule()
       await expect(createCliTwoFactorPrompt()()).rejects.toThrow('createCliTwoFactorPrompt requires @heroku/heroku-cli-util to be installed')
     })
+  })
+
+  it('propagates a dependency missing from cli-util\'s own install unchanged', async () => {
+    const notFound = failImport("Cannot find package 'chalk' imported from /app/node_modules/@heroku/heroku-cli-util/dist/ux/prompt.js")
+    const {cliTwoFactorPrompt} = await loadModule()
+
+    await expect(cliTwoFactorPrompt()).rejects.toBe(notFound)
   })
 })
