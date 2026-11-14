@@ -132,6 +132,9 @@ const internal = new HerokuApiClient({service: 'custom', baseUrl: 'https://my-se
 
 An explicit `baseUrl` always wins over both the service default and the
 environment variable. You're responsible for validating any `baseUrl` you pass.
+If a named service is given a `baseUrl` but no `token`, it still sends
+`HEROKU_API_KEY` to that host. Use a `custom` client, or pass `token`, for a
+host that shouldn't receive it.
 
 **Environment host validation.** Host override variables are read when a
 client is created. The value must point at an approved host, or creating the

@@ -123,7 +123,9 @@ export interface HerokuApiClientOptions {
   /**
    * Base URL for requests. Required when `service` is `'custom'`. For any other
    * service it replaces the service default and that service's host environment
-   * variable. Not validated: you're responsible for the host you pass.
+   * variable. Not validated: you're responsible for the host you pass. A named
+   * service with no `token` still sends `HEROKU_API_KEY` to this host; use a
+   * `custom` client or pass `token` for a host that shouldn't receive it.
    */
   baseUrl?: string;
   /**
