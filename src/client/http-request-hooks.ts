@@ -10,7 +10,7 @@ import type {AfterResponseHook, BeforeRequestHook} from 'ky'
 import type {ResponseMetadata, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugRequest, debugResponse} from '../debug-loggers.js'
-import {logScrubbed} from '../redact.js'
+import {type LoggedUrl, logScrubbed, redactUrlForLog} from '../redact.js'
 import {handleErrorResponse} from './http-error-handler.js'
 import {REQUEST_ID_HEADER, type RequestIdStore} from './request-id.js'
 import {handle2FAChallenge, is2FAError} from './two-factor-authentication-handler.js'
@@ -32,10 +32,7 @@ const MAX_SHOWN_WARNINGS = 256
  * token is resolved here, since it comes from an async provider and so can't be
  * a static instance header.
  */
-export function createBeforeRequestHook(
-  getToken: () => Promise<string | undefined>,
-  debug?: boolean,
-): BeforeRequestHook {
+export function createBeforeRequestHook(getToken: () => Promise<string | undefined>): BeforeRequestHook {
   return async ({request}) => {
     // Add authorization header.
     //
@@ -52,11 +49,23 @@ export function createBeforeRequestHook(
       request.headers.set('Authorization', `Bearer ${token}`)
       debugAuth('Authorization header added')
     }
+  }
+}
 
-    debugRequest('%s %s', request.method, request.url)
-    if (debug) {
-      await logScrubbed(debugRequest, 'Headers: %O', request.headers)
-    }
+/**
+ * Create a hook that logs the request as sent: method, redacted URL, and
+ * scrubbed headers on `heroku:fetch:request`. Registered last in
+ * `beforeRequest`, after the consumer hooks, so it shows `Request-Id` and any
+ * header a hook added or replaced; and in `beforeRetry`, so network retries and
+ * the 2FA replay (sent through ky's retry, which skips `beforeRequest`) are
+ * logged too.
+ */
+export function createRequestLogHook(loggedUrl: LoggedUrl = 'full'): (state: {request: Request}) => Promise<void> {
+  return async ({request}) => {
+    if (!debugRequest.enabled) return
+
+    debugRequest('%s %s', request.method, redactUrlForLog(request.url, loggedUrl))
+    await logScrubbed(debugRequest, 'Headers: %O', request.headers)
   }
 }
 
@@ -179,7 +188,7 @@ function normalizedWarning(response: Response): string | undefined {
  * client don't interfere. Returns the original response untouched when it isn't
  * a handleable 2FA challenge.
  */
-export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined): AfterResponseHook {
+export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefined, loggedUrl: LoggedUrl = 'full'): AfterResponseHook {
   return async ({request, response}) => {
     // Cheap guards first, so the body-reading is2FAError() probe below is only
     // reached when it can matter: skip when no 2FA handler is configured, or
@@ -192,7 +201,7 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
       || (response.status === 403 && await is2FAError(response))
 
     if (is2FAChallenge) {
-      return handle2FAChallenge(request, twoFactorOptions)
+      return handle2FAChallenge(request, twoFactorOptions, loggedUrl)
     }
 
     return response
@@ -205,9 +214,11 @@ export function create2FAAfterHook(twoFactorOptions: TwoFactorOptions | undefine
  * Registered before the Request-Id, warning, metadata, and consumer hooks, so
  * those run only on the success path (this throws and stops the chain first).
  */
-export function createErrorAfterHook(): AfterResponseHook {
+export function createErrorAfterHook(loggedUrl: LoggedUrl = 'full'): AfterResponseHook {
   return async ({request, response}) => {
-    debugResponse('%s %s -> %d', request.method, request.url, response.status)
+    if (debugResponse.enabled) {
+      debugResponse('%s %s -> %d', request.method, redactUrlForLog(request.url, loggedUrl), response.status)
+    }
 
     if (!response.ok) {
       await handleErrorResponse(response)

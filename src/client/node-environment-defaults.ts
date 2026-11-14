@@ -155,13 +155,7 @@ async function fetchThroughDispatcher(
     return undiciFetch(input, withDispatcher)
   }
 
-  const headers: Record<string, string> = {}
-  // Headers isn't iterable under the project's ES2020+DOM lib (no DOM.Iterable),
-  // so forEach is the available copy idiom here.
-  // eslint-disable-next-line unicorn/no-array-for-each
-  input.headers.forEach((value, key) => {
-    headers[key] = value
-  })
+  const headers: Record<string, string> = Object.fromEntries(input.headers)
 
   const hasBody = input.method !== 'GET' && input.method !== 'HEAD'
   const withDispatcher: DispatchInit = {

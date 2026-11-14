@@ -52,11 +52,11 @@ export interface HerokuHooks {
 export type FetchLike = (input: Request | string | URL, init?: Parameters<typeof fetch>[1]) => Promise<Response>
 
 /**
- * A bearer token, or a function resolving one at request time. A provider may
- * return `undefined` (sync or async) to send the request with no `Authorization`
- * header — appropriate for endpoints or hosts that need no Heroku auth. Requests
- * to endpoints that do require auth then receive a server 401, surfaced as
- * `AuthenticationError`.
+ * A bearer token, or a function resolving one at request time. An empty string,
+ * or a provider returning `undefined` or `''` (sync or async), sends the request
+ * with no `Authorization` header — appropriate for endpoints or hosts that need
+ * no Heroku auth. Requests to endpoints that do require auth then receive a
+ * server 401, surfaced as `AuthenticationError`.
  */
 export type TokenProvider = (() => Promise<string | undefined> | string | undefined) | string
 
@@ -120,10 +120,14 @@ export interface UserAgentOptions {
 }
 
 export interface HerokuApiClientOptions {
-  /** Custom base URL (for 'custom' service type) */
+  /**
+   * Base URL for requests. Required when `service` is `'custom'`. For any other
+   * service it replaces the service default and that service's host environment
+   * variable. Not validated: you're responsible for the host you pass. A named
+   * service with no `token` still sends `HEROKU_API_KEY` to this host; use a
+   * `custom` client or pass `token` for a host that shouldn't receive it.
+   */
   baseUrl?: string;
-  /** Enable debugging */
-  debug?: boolean;
   /**
    * Override the service's default `Accept` header for this client. Applied
    * only when a request doesn't already carry an `Accept` (so per-call
@@ -221,11 +225,27 @@ export interface HerokuApiClientOptions {
    * {@link RequestOptions.signal}, rather than wiring a process-lifetime one.
    */
   signal?: AbortSignal;
-  /** Request timeout in milliseconds */
-  timeout?: number;
-  /** Static bearer token or function to retrieve token */
+  /**
+   * Milliseconds to wait for each HTTP attempt's response to start, or `false`
+   * for no limit. It doesn't limit reading the body of a returned `Response`, so
+   * a long `stream()` isn't cut off. Must be from 1 to 2 147 483 647, else the
+   * constructor and `setOption` throw; use `false`, not `0`, for no timeout.
+   * Omitted → 30 000.
+   */
+  timeout?: false | number;
+  /**
+   * Static bearer token or function to retrieve token. Omitted (or `undefined`)
+   * → named services use the environment default (`HEROKU_API_KEY`, read per
+   * request, on Node; none in browsers), while a `custom` client sends no
+   * `Authorization` header, since its host may be outside Heroku. Pass a token
+   * explicitly to authenticate a `custom` client.
+   */
   token?: TokenProvider;
-  /** Two-factor authentication configuration */
+  /**
+   * Answers 2FA challenges by asking for a code and replaying the request with
+   * it. Omitted → named services use the environment default (a terminal prompt
+   * on Node, none in the browser); `custom` clients don't answer challenges.
+   */
   twoFactor?: TwoFactorOptions;
   /**
    * Identifies this client's traffic with a `User-Agent` header, assembled from
@@ -271,10 +291,12 @@ export interface RequestOptions {
   searchParams?: Record<string, boolean | number | string>;
   /** Aborts the in-flight request when the signal fires. */
   signal?: AbortSignal;
-  /** Enable streaming response */
-  stream?: boolean;
-  /** Request timeout override */
-  timeout?: number;
+  /**
+   * Overrides the client's {@link HerokuApiClientOptions.timeout} for this
+   * request: milliseconds, or `false` for no limit. A value outside 1 to
+   * 2 147 483 647, including `0`, rejects the request.
+   */
+  timeout?: false | number;
 }
 
 export interface HerokuError {

@@ -13,12 +13,14 @@ import ky, {type KyInstance, type Options as KyOptions} from 'ky'
 
 import type {
   HerokuApiClientOptions,
+  HerokuService,
   RequestOptions,
   TokenProvider,
 } from '../types.js'
 
-import {debugAuth, debugRequest} from '../debug-loggers.js'
+import {debugAuth} from '../debug-loggers.js'
 import {AuthenticationError} from '../errors.js'
+import {type LoggedUrl, redactUrlForLog} from '../redact.js'
 import {
   create2FAAfterHook,
   createBeforeRequestHook,
@@ -26,6 +28,7 @@ import {
   createMetadataAfterHook,
   createRequestIdAfterHook,
   createRequestIdBeforeHook,
+  createRequestLogHook,
   createWarningAfterHook,
 } from './http-request-hooks.js'
 import {RequestIdStore} from './request-id.js'
@@ -49,6 +52,68 @@ function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | 
   return AbortSignal.any(present)
 }
 
+const DEFAULT_TIMEOUT = 30_000
+
+/** How many times a GET is retried after a network error. */
+const NETWORK_RETRIES = 3
+
+/**
+ * ky's retry settings. A GET (including `stream()`) that fails with a network error (refused
+ * connection, DNS failure, reset) is retried up to {@link NETWORK_RETRIES}
+ * times, after 300, 600 and 1200 ms. Other methods aren't retried, because the
+ * server may have acted before the connection dropped. Timeouts and error
+ * responses aren't retried either.
+ *
+ * ky counts the 2FA replay as a retry but doesn't ask `shouldRetry` about it,
+ * so the limit has one slot more than `shouldRetry` allows network retries.
+ * That way the replay still runs after the network retries are used up.
+ */
+const RETRY: NonNullable<KyOptions['retry']> = {
+  delay: attempt => 300 * (2 ** (attempt - 1)),
+  limit: NETWORK_RETRIES + 1,
+  methods: ['get'],
+  retryOnTimeout: false,
+  shouldRetry({retryCount}) {
+    if (retryCount > NETWORK_RETRIES) return false
+  },
+  statusCodes: [],
+}
+
+/** The longest delay `setTimeout` accepts; ky rejects anything larger. */
+const MAX_TIMEOUT = 2_147_483_647
+
+/**
+ * Reject a timeout that isn't `false` or a positive delay `setTimeout` can
+ * hold, so a bad value fails where it's set rather than on every request.
+ * `0` is rejected too: ky would apply it as a 0 ms limit and abort every
+ * request, while callers passing 0 usually mean "no timeout", which is `false`.
+ */
+function checkTimeout<T extends false | number | undefined>(timeout: T): T {
+  if (timeout === undefined || timeout === false) return timeout
+  if (typeof timeout !== 'number' || !(timeout > 0 && timeout <= MAX_TIMEOUT)) {
+    throw new TypeError(`timeout must be a number of milliseconds from 1 to ${MAX_TIMEOUT}, or false for no timeout`)
+  }
+
+  return timeout
+}
+
+/**
+ * The token and 2FA handler a client uses. Named Heroku services fall back to
+ * the environment's defaults: a token provider (HEROKU_API_KEY on Node) and a
+ * 2FA handler. A `custom` client may point at a host outside Heroku, so it
+ * sends a token or a 2FA code only when given a token or handler explicitly.
+ */
+function authDefaults(
+  service: HerokuService,
+  options: HerokuApiClientOptions,
+): Pick<HerokuApiClientOptions, 'token' | 'twoFactor'> {
+  if (service === 'custom') return {token: options.token, twoFactor: options.twoFactor}
+  return {
+    token: options.token ?? getDefaultTokenProvider(),
+    twoFactor: options.twoFactor ?? getDefaultTwoFactorOptions(),
+  }
+}
+
 export class HerokuApiClient {
   private clientPromise: null | Promise<KyInstance> = null
   private kyOptions: KyOptions
@@ -67,18 +132,14 @@ export class HerokuApiClient {
 
   constructor(options: HerokuApiClientOptions = {}) {
     this.options = {
-      service: options.service || 'platform',
-      timeout: options.timeout || 30_000,
       ...options,
+      service: options.service || 'platform',
+      timeout: checkTimeout(options.timeout) ?? DEFAULT_TIMEOUT,
     }
 
-    // If no token provided, use default token provider
-    this.tokenProvider = options.token === undefined ? getDefaultTokenProvider() : options.token
-
-    // If no twoFactor provided, use default 2FA handler
-    if (!options.twoFactor) {
-      this.options.twoFactor = getDefaultTwoFactorOptions()
-    }
+    const auth = authDefaults(this.options.service, options)
+    this.tokenProvider = auth.token
+    this.options.twoFactor = auth.twoFactor
 
     // Determine base URL
     const serviceConfig = SERVICE_CONFIGS[this.options.service]
@@ -91,7 +152,10 @@ export class HerokuApiClient {
     // validates the host env vars, and an unused one mustn't fail the client.
     const baseUrl = options.baseUrl || serviceConfig.baseUrl
 
-    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, baseUrl)
+    // A `custom` client calls URLs such as a log session's, whose path can be
+    // the credential, so its log lines show only the origin.
+    const loggedUrl: LoggedUrl = this.options.service === 'custom' ? 'origin' : 'full'
+    debugAuth('Initializing client for service: %s, baseUrl: %s', this.options.service, redactUrlForLog(baseUrl, loggedUrl))
 
     // Stash the ky options; the actual ky instance is built lazily so
     // we can await getDefaultFetch() (Node loads undici dynamically for
@@ -125,6 +189,7 @@ export class HerokuApiClient {
       }
     }
 
+    const requestLog = createRequestLogHook(loggedUrl)
     this.kyOptions = {
       headers,
       hooks: {
@@ -133,8 +198,8 @@ export class HerokuApiClient {
         // throws on a non-ok response — so the Request-Id tracking, warning, and
         // metadata hooks after it run only on the success path.
         afterResponse: [
-          create2FAAfterHook(this.options.twoFactor),
-          createErrorAfterHook(),
+          create2FAAfterHook(this.options.twoFactor, loggedUrl),
+          createErrorAfterHook(loggedUrl),
           createRequestIdAfterHook(this.requestIds),
           createWarningAfterHook(
             this.shownWarnings,
@@ -146,14 +211,19 @@ export class HerokuApiClient {
           ...(options.hooks?.afterResponse ?? []),
         ],
         beforeRequest: [
-          createBeforeRequestHook(() => this.getToken(), this.options.debug),
+          createBeforeRequestHook(() => this.getToken()),
           createRequestIdBeforeHook(this.requestIds),
-          // Consumer hooks run last: they see (and may override) the fully
-          // prepared request after auth and Request-Id are attached.
+          // Consumer hooks see (and may override) the fully prepared request
+          // after auth and Request-Id are attached.
           ...(options.hooks?.beforeRequest ?? []),
+          // Logged last, so the log shows the request as it is sent.
+          requestLog,
         ],
+        // Retries, including the 2FA replay, skip beforeRequest.
+        beforeRetry: [requestLog],
       },
       prefix: baseUrl,
+      retry: RETRY,
       timeout: this.options.timeout,
     }
   }
@@ -162,7 +232,6 @@ export class HerokuApiClient {
    * Make a DELETE request
    */
   public async delete(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('DELETE %s', path)
     return this.request(path, {...options, method: 'DELETE'})
   }
 
@@ -170,7 +239,6 @@ export class HerokuApiClient {
    * Make a GET request
    */
   public async get(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('GET %s', path)
     return this.request(path, {...options, method: 'GET'})
   }
 
@@ -178,7 +246,6 @@ export class HerokuApiClient {
    * Make a PATCH request
    */
   public async patch(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('PATCH %s', path)
     return this.request(path, {...options, body, method: 'PATCH'})
   }
 
@@ -186,7 +253,6 @@ export class HerokuApiClient {
    * Make a POST request
    */
   public async post(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('POST %s', path)
     return this.request(path, {...options, body, method: 'POST'})
   }
 
@@ -194,7 +260,6 @@ export class HerokuApiClient {
    * Make a PUT request
    */
   public async put(path: string, body?: unknown, options?: RequestOptions): Promise<Response> {
-    debugRequest('PUT %s', path)
     return this.request(path, {...options, body, method: 'PUT'})
   }
 
@@ -218,7 +283,12 @@ export class HerokuApiClient {
     // mutation would land), but is deliberately kept construction-only: it's an
     // auth policy that should be fixed for the client, with per-request control
     // exposed instead through `RequestOptions.reauthorize: false`.
-    if (key === 'timeout' || key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
+    if (key === 'timeout') {
+      this.options.timeout = checkTimeout(value as HerokuApiClientOptions['timeout']) ?? DEFAULT_TIMEOUT
+      return
+    }
+
+    if (key === 'warn' || key === 'onResponseMetadata' || key === 'signal') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.options as Record<string, any>)[key] = value
       return
@@ -231,8 +301,6 @@ export class HerokuApiClient {
    * Create a streaming request (returns the Response object for stream access)
    */
   public async stream(path: string, options?: RequestOptions): Promise<Response> {
-    debugRequest('STREAM %s', path)
-
     const signal = combineSignals(this.options.signal, options?.signal)
     const kyOptions: KyOptions = {
       // Only set these when the caller supplied them: a literal `undefined`
@@ -242,7 +310,7 @@ export class HerokuApiClient {
       ...(options?.searchParams && {searchParams: options.searchParams}),
       ...(signal && {signal}),
       method: 'GET',
-      timeout: options?.timeout || this.options.timeout,
+      timeout: checkTimeout(options?.timeout) ?? this.options.timeout,
     }
 
     const client = await this.getClient()
@@ -328,7 +396,7 @@ export class HerokuApiClient {
       ...(options?.searchParams && {searchParams: options.searchParams}),
       ...(signal && {signal}),
       method: options?.method || 'GET',
-      timeout: options?.timeout || this.options.timeout,
+      timeout: checkTimeout(options?.timeout) ?? this.options.timeout,
     }
 
     if (options?.body !== undefined) {
@@ -393,11 +461,9 @@ export class HerokuApiClient {
           // the original attached as `cause` so consumers don't lose the 401's
           // statusCode/id/request context (and an `instanceof AuthenticationError`
           // check on the cause chain still works). Only set it when the callback
-          // didn't already supply a cause of its own. (Cast for `cause`: the
-          // package targets the ES2020 lib, where it isn't yet on `Error`.)
-          const withCause = reauthorizeError as {cause?: unknown}
-          if (reauthorizeError instanceof Error && withCause.cause === undefined) {
-            withCause.cause = error
+          // didn't already supply a cause of its own.
+          if (reauthorizeError instanceof Error && reauthorizeError.cause === undefined) {
+            reauthorizeError.cause = error
           }
 
           throw reauthorizeError

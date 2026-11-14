@@ -1,5 +1,5 @@
 import {
-  afterEach, describe, expect, it, vi,
+  afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest'
 
 import {HerokuApiClient} from './index.js'
@@ -16,10 +16,13 @@ describe('environment service host configuration', () => {
     ['metrics', 'HEROKU_METRICS_HOST'],
     ['notifications', 'HEROKU_NOTIFICATIONS_HOST'],
     ['particleboard', 'HEROKU_PARTICLEBOARD_URL'],
+    ['platform', 'HEROKU_PLATFORM_HOST'],
+    ['platform', 'HEROKU_API_URL'],
     ['repositories', 'HEROKU_REPOSITORIES_HOST'],
   ] as const)('rejects untrusted hosts and names %s variable (%s)', (service, variable) => {
     vi.stubEnv(variable, 'https://attacker.example')
     if (variable === 'HEROKU_POSTGRESQL_HOST') vi.stubEnv('HEROKU_DATA_HOST', '')
+    if (variable === 'HEROKU_API_URL') vi.stubEnv('HEROKU_PLATFORM_HOST', '')
 
     const error = (() => {
       try {
@@ -99,5 +102,71 @@ describe('environment service host configuration', () => {
       service: 'data',
       token: 'test-token',
     })).not.toThrow()
+  })
+})
+
+describe('SERVICE_CONFIGS', () => {
+  describe('platform config', () => {
+    beforeEach(() => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', '')
+      vi.stubEnv('HEROKU_API_URL', '')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    })
+
+    it('defaults to the public Platform API', () => {
+      expect(SERVICE_CONFIGS.platform).toEqual({
+        baseUrl: 'https://api.heroku.com',
+        defaultAccept: 'application/vnd.heroku+json; version=3',
+      })
+    })
+
+    it('uses HEROKU_PLATFORM_HOST as given', () => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', 'http://localhost:5001')
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('http://localhost:5001')
+    })
+
+    it('gives a bare HEROKU_PLATFORM_HOST hostname https://', () => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', 'api.staging.herokudev.com')
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('https://api.staging.herokudev.com')
+    })
+
+    it('uses HEROKU_API_URL when HEROKU_PLATFORM_HOST is unset', () => {
+      vi.stubEnv('HEROKU_API_URL', 'https://api.staging.herokudev.com/')
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('https://api.staging.herokudev.com')
+    })
+
+    it('prefers HEROKU_PLATFORM_HOST over HEROKU_API_URL', () => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', 'api.one.herokudev.com')
+      vi.stubEnv('HEROKU_API_URL', 'https://api.two.herokudev.com')
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('https://api.one.herokudev.com')
+    })
+
+    it('rejects an HEROKU_API_URL with a path rather than dropping it', () => {
+      vi.stubEnv('HEROKU_API_URL', 'https://api.heroku.com/v3')
+
+      expect(() => SERVICE_CONFIGS.platform.baseUrl).toThrow(/HEROKU_API_URL must not include a path/)
+    })
+
+    it('ignores HEROKU_HOST', () => {
+      vi.stubEnv('HEROKU_HOST', 'staging.herokudev.com')
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('https://api.heroku.com')
+    })
+
+    it('falls back to the default where there is no process', () => {
+      // stubGlobal needs an explicit undefined to remove the global.
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      vi.stubGlobal('process', undefined)
+
+      expect(SERVICE_CONFIGS.platform.baseUrl).toBe('https://api.heroku.com')
+    })
   })
 })

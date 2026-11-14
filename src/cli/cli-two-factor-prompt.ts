@@ -1,13 +1,14 @@
 /**
  * CLI Two-Factor Authentication Prompt
  *
- * Provides a reusable 2FA challenge handler for Heroku CLIs.
- * This module requires @heroku/heroku-cli-util to be installed.
+ * Provides a reusable 2FA challenge handler for Heroku CLIs. Prompting requires
+ * the optional `@heroku/heroku-cli-util` dependency. It is imported only when a
+ * prompt runs, so importing this module (and the package's Node entry point)
+ * doesn't load it, and its absence surfaces only when a 2FA prompt is needed.
  *
  * @example
  * ```typescript
- * import { HerokuApiClient } from '@heroku/heroku-fetch';
- * import { cliTwoFactorPrompt } from '@heroku/heroku-fetch/cli-two-factor-prompt';
+ * import { HerokuApiClient, cliTwoFactorPrompt } from '@heroku/heroku-fetch';
  *
  * const client = new HerokuApiClient({
  *   service: 'platform',
@@ -18,7 +19,41 @@
  * ```
  */
 
-import {prompt} from '@heroku/heroku-cli-util/hux'
+const DEFAULT_MESSAGE = 'Enter your 2FA code'
+
+/**
+ * Node's error when `@heroku/heroku-cli-util` itself can't be found. Node quotes
+ * the missing specifier, then names the importing file, so a dependency missing
+ * from cli-util's own install (`Cannot find package 'x' imported from
+ * .../@heroku/heroku-cli-util/...`) doesn't match.
+ */
+const CLI_UTIL_NOT_FOUND = /^Cannot find (?:module|package) '@heroku\/heroku-cli-util(?:\/[^']*)?'/
+
+/**
+ * Prompt for a 2FA code with masked input via heroku-cli-util's `hux.prompt`.
+ * Only the import is guarded: a missing `@heroku/heroku-cli-util` becomes an
+ * actionable install error naming `caller`, with Node's error as its `cause`.
+ * Any other import failure, and errors from the prompt itself, propagate
+ * unchanged.
+ */
+async function promptForCode(message: string, caller: string): Promise<string> {
+  let prompt: typeof import('@heroku/heroku-cli-util/hux').prompt
+  try {
+    ({prompt} = await import('@heroku/heroku-cli-util/hux'))
+  } catch (error) {
+    const {code, message: errorMessage} = error as {code?: unknown; message?: unknown}
+    const missing = (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND')
+      && typeof errorMessage === 'string' && CLI_UTIL_NOT_FOUND.test(errorMessage)
+    if (missing) {
+      throw new Error(`${caller} requires @heroku/heroku-cli-util to be installed. `
+        + 'Please run: npm install @heroku/heroku-cli-util', {cause: error})
+    }
+
+    throw error
+  }
+
+  return prompt(message, {type: 'password'})
+}
 
 /**
  * Two-factor authentication challenge handler for Heroku CLIs.
@@ -39,20 +74,7 @@ import {prompt} from '@heroku/heroku-cli-util/hux'
  * ```
  */
 export async function cliTwoFactorPrompt(): Promise<string> {
-  // Dynamic import to avoid requiring @heroku/heroku-cli-util for non-CLI users
-  try {
-    const code = await prompt('Enter your 2FA code', {
-      type: 'password',
-    })
-    return code
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Cannot find module')) {
-      throw new Error('cliTwoFactorPrompt requires @heroku/heroku-cli-util to be installed. '
-        + 'Please run: npm install @heroku/heroku-cli-util')
-    }
-
-    throw error
-  }
+  return promptForCode(DEFAULT_MESSAGE, 'cliTwoFactorPrompt')
 }
 
 /**
@@ -64,7 +86,7 @@ export async function cliTwoFactorPrompt(): Promise<string> {
  *
  * @example
  * ```typescript
- * import { createCliTwoFactorPrompt } from '@heroku/heroku-fetch/cli-two-factor-prompt';
+ * import { createCliTwoFactorPrompt } from '@heroku/heroku-fetch';
  *
  * const client = new HerokuApiClient({
  *   service: 'platform',
@@ -79,21 +101,6 @@ export async function cliTwoFactorPrompt(): Promise<string> {
 export function createCliTwoFactorPrompt(options?: {
   message?: string;
 }): () => Promise<string> {
-  const message = options?.message || 'Enter your 2FA code'
-
-  return async () => {
-    try {
-      const code = await prompt(message, {
-        type: 'password',
-      })
-      return code
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('Cannot find module')) {
-        throw new Error('createCliTwoFactorPrompt requires @heroku/heroku-cli-util to be installed. '
-          + 'Please run: npm install @heroku/heroku-cli-util')
-      }
-
-      throw error
-    }
-  }
+  const message = options?.message || DEFAULT_MESSAGE
+  return async () => promptForCode(message, 'createCliTwoFactorPrompt')
 }

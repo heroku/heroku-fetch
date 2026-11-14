@@ -262,14 +262,14 @@ describe('HerokuApiClient', () => {
     })
 
     it('sends no Authorization header and surfaces a 401 as AuthenticationError', async () => {
-      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+      const client = new HerokuApiClient({baseUrl, service: 'platform'})
 
       await expect(client.get('/apps')).rejects.toBeInstanceOf(AuthenticationError)
       expect(receivedAuth).toBeUndefined()
     })
 
     it('promotes the error body id onto the AuthenticationError', async () => {
-      const client = new HerokuApiClient({baseUrl, service: 'custom'})
+      const client = new HerokuApiClient({baseUrl, service: 'platform'})
 
       await expect(client.get('/apps')).rejects.toMatchObject({
         id: 'unauthorized',
@@ -349,6 +349,15 @@ describe('HerokuApiClient', () => {
       expect(tokenProvider).not.toHaveBeenCalled()
       expect(fetchMock).not.toHaveBeenCalled()
       expect(receivedPath).toBeUndefined()
+    })
+
+    it('sends platform requests to HEROKU_PLATFORM_HOST', async () => {
+      vi.stubEnv('HEROKU_PLATFORM_HOST', serverUrl)
+      const client = new HerokuApiClient({service: 'platform', token: 'test-token'})
+
+      await client.get('/apps/my-app')
+
+      expect(receivedPath).toBe('/apps/my-app')
     })
 
     it('sends metrics requests to HEROKU_METRICS_HOST', async () => {
@@ -707,6 +716,20 @@ describe('HerokuApiClient', () => {
       // Exactly one retry: the original challenge plus the (still-rejected) retry.
       expect(requests).toHaveLength(2)
       expect(requests[1].twoFactorCode).toBe('wrong')
+    })
+
+    it('does not answer a challenge for a custom client with no twoFactor handler', async () => {
+      const client = new HerokuApiClient({baseUrl, service: 'custom', token: 'test'})
+
+      await expect(client.get('/account')).rejects.toBeInstanceOf(TwoFactorRequiredError)
+      expect(requests).toHaveLength(1)
+    })
+
+    it('gives named services the default handler but not custom clients', () => {
+      const twoFactorOf = (c: HerokuApiClient) => (c as unknown as {options: {twoFactor?: unknown}}).options.twoFactor
+
+      expect(twoFactorOf(new HerokuApiClient({baseUrl, token: 'test'}))).toBeDefined()
+      expect(twoFactorOf(new HerokuApiClient({baseUrl, service: 'custom', token: 'test'}))).toBeUndefined()
     })
   })
 
@@ -1321,13 +1344,6 @@ describe('HerokuApiClient', () => {
 
 describe('SERVICE_CONFIGS', () => {
   const HEROKU_V3_ACCEPT = 'application/vnd.heroku+json; version=3'
-
-  it('should have platform config', () => {
-    expect(SERVICE_CONFIGS.platform).toEqual({
-      baseUrl: 'https://api.heroku.com',
-      defaultAccept: HEROKU_V3_ACCEPT,
-    })
-  })
 
   describe('data config', () => {
     beforeEach(() => {

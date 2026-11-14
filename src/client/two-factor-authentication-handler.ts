@@ -9,7 +9,7 @@ import ky from 'ky'
 import type {HerokuErrorResponse, TwoFactorOptions} from '../types.js'
 
 import {debugAuth, debugError} from '../debug-loggers.js'
-import {logScrubbed} from '../redact.js'
+import {type LoggedUrl, logScrubbedFor} from '../redact.js'
 
 /**
  * Check if a 403 response is a 2FA error by checking the error id
@@ -39,17 +39,13 @@ export async function is2FAError(response: Response): Promise<boolean> {
  * back through the full afterResponse chain (error handling, Request-Id,
  * warnings, metadata, and consumer hooks) exactly once. The forced retry counts
  * against `retry.limit` and is observable in `beforeRetry` as a
- * `ForceRetryError`.
- *
- * Because it draws on the same retry budget as ky's transport retries, a
- * request that already exhausted `retry.limit` on network/timeout retries would
- * surface the raw `ForceRetryError` rather than re-issuing. In practice a 2FA
- * challenge arrives on the first attempt (before any transport retry), so the
- * budget is intact; this edge only matters if that assumption ever breaks.
+ * `ForceRetryError`. The client's retry limit keeps a slot for it, so it runs
+ * even after a GET's network retries are used up.
  */
 export async function handle2FAChallenge(
   request: Request,
   twoFactorOptions: TwoFactorOptions,
+  loggedUrl: LoggedUrl = 'full',
 ): Promise<ReturnType<typeof ky.retry>> {
   debugAuth('2FA challenge detected, invoking callback')
 
@@ -62,7 +58,7 @@ export async function handle2FAChallenge(
 
     return ky.retry({code: 'TWO_FACTOR', request: new Request(request, {headers})})
   } catch (error) {
-    await logScrubbed(debugError, '2FA retry failed: %O', error)
+    await logScrubbedFor(loggedUrl, debugError, '2FA retry failed: %O', error)
     throw error
   }
 }
