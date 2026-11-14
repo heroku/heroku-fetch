@@ -226,7 +226,8 @@ export interface HerokuApiClientOptions {
   /**
    * Milliseconds to wait for each HTTP attempt's response to start, or `false`
    * for no limit. It doesn't limit reading the body of a returned `Response`, so
-   * a long `stream()` isn't cut off. `0` throws; use `false` for no timeout.
+   * a long `stream()` isn't cut off. Must be from 1 to 2 147 483 647, else the
+   * constructor and `setOption` throw; use `false`, not `0`, for no timeout.
    * Omitted → 30 000.
    */
   timeout?: false | number;
@@ -290,7 +291,8 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /**
    * Overrides the client's {@link HerokuApiClientOptions.timeout} for this
-   * request: milliseconds, or `false` for no limit. `0` rejects.
+   * request: milliseconds, or `false` for no limit. A value outside 1 to
+   * 2 147 483 647, including `0`, rejects the request.
    */
   timeout?: false | number;
 }

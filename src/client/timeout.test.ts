@@ -6,7 +6,7 @@ import {
 
 import {HerokuApiClient} from './index.js'
 
-const ZERO_TIMEOUT = /timeout must be a positive number of milliseconds, or false for no timeout/
+const INVALID_TIMEOUT = /timeout must be a number of milliseconds from 1 to 2147483647, or false for no timeout/
 
 const timeoutOf = (c: HerokuApiClient) => (c as unknown as {options: {timeout: unknown}}).options.timeout
 
@@ -79,18 +79,28 @@ describe('timeout', () => {
     expect(timeoutOf(c)).toBe(30_000)
   })
 
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648, '5000', null])('rejects %s where it is set', value => {
+    const bad = value as unknown as number
+    expect(() => client(bad)).toThrow(INVALID_TIMEOUT)
+    expect(() => client().setOption('timeout', bad)).toThrow(INVALID_TIMEOUT)
+  })
+
+  it('accepts the largest timeout setTimeout can hold', () => {
+    expect(timeoutOf(client(2_147_483_647))).toBe(2_147_483_647)
+  })
+
   describe('a zero timeout', () => {
     it('throws from the constructor', () => {
-      expect(() => client(0)).toThrow(ZERO_TIMEOUT)
+      expect(() => client(0)).toThrow(INVALID_TIMEOUT)
     })
 
     it('throws from setOption', () => {
-      expect(() => client().setOption('timeout', 0)).toThrow(ZERO_TIMEOUT)
+      expect(() => client().setOption('timeout', 0)).toThrow(INVALID_TIMEOUT)
     })
 
     it('rejects a request or stream that passes it', async () => {
-      await expect(client().get('/a', {timeout: 0})).rejects.toThrow(ZERO_TIMEOUT)
-      await expect(client().stream('/a', {timeout: 0})).rejects.toThrow(ZERO_TIMEOUT)
+      await expect(client().get('/a', {timeout: 0})).rejects.toThrow(INVALID_TIMEOUT)
+      await expect(client().stream('/a', {timeout: 0})).rejects.toThrow(INVALID_TIMEOUT)
     })
   })
 

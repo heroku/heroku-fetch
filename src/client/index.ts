@@ -54,14 +54,19 @@ function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | 
 
 const DEFAULT_TIMEOUT = 30_000
 
+/** The longest delay `setTimeout` accepts; ky rejects anything larger. */
+const MAX_TIMEOUT = 2_147_483_647
+
 /**
- * Reject a zero timeout. ky would apply it as a 0 ms limit and abort every
+ * Reject a timeout that isn't `false` or a positive delay `setTimeout` can
+ * hold, so a bad value fails where it's set rather than on every request.
+ * `0` is rejected too: ky would apply it as a 0 ms limit and abort every
  * request, while callers passing 0 usually mean "no timeout", which is `false`.
- * ky validates every other value itself.
  */
 function checkTimeout<T extends false | number | undefined>(timeout: T): T {
-  if (timeout === 0) {
-    throw new TypeError('timeout must be a positive number of milliseconds, or false for no timeout')
+  if (timeout === undefined || timeout === false) return timeout
+  if (typeof timeout !== 'number' || !(timeout > 0 && timeout <= MAX_TIMEOUT)) {
+    throw new TypeError(`timeout must be a number of milliseconds from 1 to ${MAX_TIMEOUT}, or false for no timeout`)
   }
 
   return timeout

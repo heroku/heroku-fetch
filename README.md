@@ -270,7 +270,9 @@ await client.get('/apps/my-app/releases', {
 
 `timeout` limits how long each attempt waits for the response to start. It
 doesn't cover reading the body, so a long `stream()` isn't cut off. Pass
-`false` for no timeout; `0` throws, because it would abort every request.
+`false` for no timeout. Any other value must be from 1 to 2 147 483 647
+milliseconds, or it throws where you set it. That includes `0`, which would
+otherwise abort every request.
 
 A client-level `signal` aborts every request the client makes. It is combined
 with any per-request `signal` and the timeout, so whichever fires first aborts
