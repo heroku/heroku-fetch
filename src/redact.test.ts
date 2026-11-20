@@ -2,7 +2,9 @@ import {
   describe, expect, it, vi,
 } from 'vitest'
 
-import {logScrubbed, scrubForLog} from './redact.js'
+import {
+  logScrubbed, logScrubbedFor, redactUrl, redactUrlPath, scrubForLog,
+} from './redact.js'
 
 function makeLogger(enabled: boolean) {
   const logger = vi.fn() as unknown as {
@@ -147,6 +149,69 @@ describe('scrubForLog', () => {
     expect(result.response.url).not.toContain('abc')
   })
 
+  it('shows only the origin of URLs in an error, its message, and its cause, for origin logging', async () => {
+    const url = 'https://logplex.example.com/sessions/session-secret?srv=1'
+    const cause = Object.assign(new Error(`Request failed: GET ${url}`), {request: {method: 'GET', url}})
+    const error = Object.assign(new Error(`Request failed: GET ${url}`, {cause}), {
+      request: {method: 'GET', url},
+      response: {status: 500, statusText: 'Server Error', url},
+    })
+
+    const result = await scrubForLog(error, 'origin')
+
+    expect(JSON.stringify(result)).not.toContain('session-secret')
+    expect(result).toMatchObject({
+      cause: {message: 'Request failed: GET https://logplex.example.com/[REDACTED]'},
+      message: 'Request failed: GET https://logplex.example.com/[REDACTED]',
+      request: {url: 'https://logplex.example.com/[REDACTED]'},
+      response: {url: 'https://logplex.example.com/[REDACTED]'},
+    })
+  })
+
+  it('keeps the path of URLs in an error by default', async () => {
+    const url = 'https://api.heroku.com/apps/my-app?token=abc'
+    const error = Object.assign(new Error(`Request failed: GET ${url}`), {request: {method: 'GET', url}})
+
+    const result = await scrubForLog(error)
+
+    expect(result).toMatchObject({
+      message: 'Request failed: GET https://api.heroku.com/apps/my-app?token=[REDACTED]',
+      request: {url: 'https://api.heroku.com/apps/my-app?token=[REDACTED]'},
+    })
+  })
+
+  it('redacts headers whose names suggest a credential, keeping the rest', async () => {
+    const headers = new Headers({
+      Accept: 'application/json',
+      'Request-Id': 'abc',
+      'X-Access-Key': 'k',
+      'X-Api-Signature': 's',
+      'X-Auth': 'a',
+      'X-Credential': 'c',
+      'X-Saml-Assertion': 'sa',
+      'X-Session-Id': 'si',
+    })
+
+    const result = await scrubForLog(headers) as Record<string, string>
+
+    expect(result).toEqual({
+      accept: 'application/json',
+      'request-id': 'abc',
+      'x-access-key': '[REDACTED]',
+      'x-api-signature': '[REDACTED]',
+      'x-auth': '[REDACTED]',
+      'x-credential': '[REDACTED]',
+      'x-saml-assertion': '[REDACTED]',
+      'x-session-id': '[REDACTED]',
+    })
+  })
+
+  it('keeps an error\'s statusCode', async () => {
+    const error = Object.assign(new Error('failed'), {statusCode: 404})
+
+    expect(await scrubForLog(error)).toMatchObject({statusCode: 404})
+  })
+
   it('caps cyclic cause recursion without crashing', async () => {
     const a = new Error('a') as Error & {cause?: unknown}
     const b = new Error('b') as Error & {cause?: unknown}
@@ -215,5 +280,46 @@ describe('logScrubbed', () => {
     const [, status, payload] = logger.mock.calls[0] as [string, number, Record<string, unknown>]
     expect(status).toBe(500)
     expect(payload.secret).toBe('[REDACTED]')
+  })
+})
+
+describe('logScrubbedFor', () => {
+  it('shows URLs in logged errors in the given form', async () => {
+    const logger = makeLogger(true)
+    const url = 'https://logplex.example.com/sessions/session-secret'
+    const error = Object.assign(new Error('failed'), {request: {method: 'GET', url}})
+
+    await logScrubbedFor('origin', logger, 'error: %O', error)
+
+    expect(logger).toHaveBeenCalledWith('error: %O', expect.objectContaining({
+      request: {method: 'GET', url: 'https://logplex.example.com/[REDACTED]'},
+    }))
+  })
+})
+
+describe('redactUrl', () => {
+  it('redacts userinfo and sensitive query values, keeping the rest readable', () => {
+    expect(redactUrl('https://user:pass@logs.heroku.com/sessions/abc?srv=1&token=s3cret&page=2'))
+      .toBe('https://[REDACTED]:[REDACTED]@logs.heroku.com/sessions/abc?srv=1&token=[REDACTED]&page=2')
+  })
+
+  it('leaves a URL without credentials unchanged', () => {
+    expect(redactUrl('https://api.heroku.com/apps?page=2')).toBe('https://api.heroku.com/apps?page=2')
+  })
+
+  it('passes through values it cannot parse', () => {
+    expect(redactUrl('/apps?token=x')).toBe('/apps?token=x')
+    expect(redactUrl(null)).toBeNull()
+  })
+})
+
+describe('redactUrlPath', () => {
+  it('keeps only the origin', () => {
+    expect(redactUrlPath('https://logplex.heroku.com/sessions/01234567-89ab?srv=1325419200'))
+      .toBe('https://logplex.heroku.com/[REDACTED]')
+  })
+
+  it('returns only the replacement for a value it cannot parse', () => {
+    expect(redactUrlPath('/sessions/abc')).toBe('[REDACTED]')
   })
 })

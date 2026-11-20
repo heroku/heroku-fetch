@@ -80,14 +80,16 @@ export default class Logs extends Command {
       )
       const session = await sessionResponse.json() as LogSession
 
-      // Stream logs from the logplex URL
-      // Note: The logplex URL is a full URL, not a relative path
+      // The logplex URL is absolute and on another host, so stream it through a
+      // `custom` client for that origin. The URL carries its own credentials,
+      // and a `custom` client sends no Heroku token unless given one.
+      const logplexUrl = new URL(session.logplex_url)
       const logsClient = new HerokuApiClient({
-        baseUrl: new URL(session.logplex_url).origin,
+        baseUrl: logplexUrl.origin,
         service: 'custom',
       })
 
-      const logsResponse = await logsClient.stream(new URL(session.logplex_url).pathname + new URL(session.logplex_url).search)
+      const logsResponse = await logsClient.stream(logplexUrl.pathname + logplexUrl.search)
 
       // Process the stream
       if (logsResponse.body) {

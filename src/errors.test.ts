@@ -6,6 +6,7 @@ import {
   AuthenticationError,
   HerokuApiError,
   NotFoundError,
+  parseRetryAfter,
   RateLimitError,
   TwoFactorRequiredError,
 } from './errors.js'
@@ -162,5 +163,61 @@ describe('Error classes', () => {
       const error = new RateLimitError(mockResponse)
       expect(error.retryAfter).toBe(60)
     })
+
+    it('converts an HTTP-date Retry-After to seconds from now', () => {
+      const retryAt = new Date(Date.now() + 90_000).toUTCString()
+      const mockResponse = new Response(null, {headers: {'Retry-After': retryAt}, status: 429})
+      const {retryAfter} = new RateLimitError(mockResponse)
+      // toUTCString drops milliseconds, so allow for the second it truncates.
+      expect(retryAfter).toBeGreaterThanOrEqual(89)
+      expect(retryAfter).toBeLessThanOrEqual(90)
+    })
+
+    it('leaves retryAfter undefined without a usable Retry-After', () => {
+      expect(new RateLimitError(new Response(null, {status: 429})).retryAfter).toBeUndefined()
+      const mockResponse = new Response(null, {headers: {'Retry-After': 'soon'}, status: 429})
+      expect(new RateLimitError(mockResponse).retryAfter).toBeUndefined()
+    })
+  })
+
+  describe('parseRetryAfter', () => {
+    const now = Date.parse('Sun, 06 Nov 1994 08:49:37 GMT')
+
+    it.each([
+      ['0', 0],
+      ['120', 120],
+      [' 30 ', 30],
+    ])('reads delta-seconds %j as %d', (value, expected) => {
+      expect(parseRetryAfter(value, now)).toBe(expected)
+    })
+
+    it.each([
+      ['Sun, 06 Nov 1994 08:50:37 GMT', 60],
+      ['Sunday, 06-Nov-94 08:50:37 GMT', 60],
+      ['Sun, 06 Nov 1994 08:49:37 GMT', 0],
+    ])('reads HTTP-date %j as %d seconds', (value, expected) => {
+      expect(parseRetryAfter(value, now)).toBe(expected)
+    })
+
+    it('reads an asctime HTTP-date', () => {
+      // asctime carries no zone, so measure from the instant Date.parse gives it.
+      const value = 'Sun Nov  6 08:50:37 1994'
+      expect(parseRetryAfter(value, Date.parse(value) - 60_000)).toBe(60)
+    })
+
+    it('rounds a partial second up', () => {
+      expect(parseRetryAfter('Sun, 06 Nov 1994 08:49:38 GMT', now + 500)).toBe(1)
+    })
+
+    it('never returns a negative wait for a past date', () => {
+      expect(parseRetryAfter('Sun, 06 Nov 1994 08:48:37 GMT', now)).toBe(0)
+    })
+
+    it.each([null, '', '   ', '1.5', '-5', '120abc', '1e3', 'soon', '2026-11-13', 'Mon'])(
+      'returns undefined for %j',
+      value => {
+        expect(parseRetryAfter(value, now)).toBeUndefined()
+      },
+    )
   })
 })

@@ -69,17 +69,38 @@ export class NotFoundError extends HerokuApiError {
   }
 }
 
+// All three HTTP-date formats (IMF-fixdate, RFC 850, asctime) start with a day
+// name. Requiring one keeps Date.parse's lenient fallbacks, which read "1.5" or
+// "-5" as calendar dates, from being taken as a Retry-After date.
+const HTTP_DATE_PREFIX = /^(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s/i
+
+/**
+ * Seconds to wait from a `Retry-After` value: a delta in whole seconds, or an
+ * HTTP-date converted to seconds from `now` (rounded up, never negative).
+ * Returns `undefined` for a missing or unrecognized value.
+ */
+export function parseRetryAfter(value: null | string, now: number = Date.now()): number | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+
+  if (/^\d+$/.test(trimmed)) return Number(trimmed)
+
+  if (!HTTP_DATE_PREFIX.test(trimmed)) return undefined
+  const date = Date.parse(trimmed)
+  if (Number.isNaN(date)) return undefined
+
+  return Math.max(0, Math.ceil((date - now) / 1000))
+}
+
 export class RateLimitError extends HerokuApiError {
+  /** Seconds to wait before retrying, from `Retry-After`; `undefined` when absent or unrecognized. */
   public retryAfter?: number
 
   constructor(response: Response, errorBody?: HerokuErrorResponse) {
     super('Rate limit exceeded', 429, response, errorBody)
     this.name = 'RateLimitError'
 
-    const retryAfter = response.headers.get('Retry-After')
-    if (retryAfter) {
-      this.retryAfter = Number.parseInt(retryAfter, 10)
-    }
+    this.retryAfter = parseRetryAfter(response.headers.get('Retry-After'))
 
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, RateLimitError)

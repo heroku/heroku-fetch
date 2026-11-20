@@ -10,8 +10,4 @@ export {
   RateLimitError,
   TwoFactorRequiredError,
 } from './errors.js'
-export {
-  getApiHost,
-  getApiUrl,
-} from './host.js'
 export type * from './public-types.js'
