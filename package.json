@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@heroku-cli/test-utils": "^1.0.1",
-    "@oclif/core": "^4.10.5",
+    "@oclif/core": "^5.1.12",
     "@types/debug": "^4.1.12",
     "@types/node": "^26.5.0",
     "@vitest/coverage-v8": "^5.0.5",
